@@ -7,7 +7,7 @@ import { RootState } from "./app/store";
 import { fetchAccessToken, fetchUserInfo, fetchAccountId } from "./features/auth/authSlice";
 import LoginPage from "./features/auth/LoginPage";
 import ClearCachePage from "./features/utilities/ClearCachePage";
-import CompanyPermissionsPage from "./features/permissions/CompanyPermissionsPage";
+import WorkflowBuilder from "./features/workflow/WorkflowBuilder";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import GlobalStyles from '@mui/material/GlobalStyles';
@@ -35,7 +35,7 @@ function HeaderBar({ user, anchorEl, handleMenuOpen, handleMenuClose, handleLogo
   const { isProduction, toggleEnvironment } = useEnvironment();
   const pageTitles: Record<string, string> = {
     '/': 'Home',
-    '/company-permissions': 'Company Permissions',
+    '/workflow-builder': 'Workflow Builder',
     '/clear-cache': 'Clear Cache',
     '/utilities': 'Utilities',
   };
@@ -196,7 +196,7 @@ export const App = () => {
             <Box sx={{ p: { xs: 2, md: 4 } }}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
-              <Route path="/company-permissions" element={<CompanyPermissionsPage />} />
+              <Route path="/workflow-builder" element={<WorkflowBuilder />} />
               <Route path="/clear-cache" element={<ClearCachePage />} />
               <Route path="/utilities" element={<UtilitiesPage />} />
               <Route path="*" element={<Navigate to="/" />} />

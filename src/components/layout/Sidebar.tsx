@@ -15,7 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
-import BusinessIcon from '@mui/icons-material/Business';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import CachedIcon from '@mui/icons-material/Cached';
 import BuildIcon from '@mui/icons-material/Build';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -23,21 +23,23 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../app/store';
+import { useEnvironment } from '../../contexts/EnvironmentContext';
 
 const drawerWidth = 260;
-
-const navItems = [
-  { text: 'Home', icon: <HomeIcon />, path: '/' },
-  { text: 'Company Permissions', icon: <BusinessIcon />, path: '/company-permissions' },
-  { text: 'Utilities', icon: <BuildIcon />, path: '/utilities' },
-  { text: 'Clear Cache', icon: <CachedIcon />, path: '/clear-cache' },
-];
 
 const Sidebar = ({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const user = useSelector((state: RootState) => state.auth.user);
+  const { isProduction } = useEnvironment();
+
+  const navItems = [
+    { text: 'Home', icon: <HomeIcon />, path: '/' },
+    ...(isProduction ? [] : [{ text: 'Workflow Builder', icon: <AccountTreeIcon />, path: '/workflow-builder' }]),
+    { text: 'Utilities', icon: <BuildIcon />, path: '/utilities' },
+    { text: 'Clear Cache', icon: <CachedIcon />, path: '/clear-cache' },
+  ];
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', position: 'relative' }}>
