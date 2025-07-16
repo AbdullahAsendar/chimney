@@ -10,11 +10,6 @@ const UtilitiesPage: React.FC = () => {
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
   const [receiptSuccess, setReceiptSuccess] = useState<string | null>(null);
-  // Workflow
-  const [workflowId, setWorkflowId] = useState('');
-  const [workflowResult, setWorkflowResult] = useState<any>(null);
-  const [workflowLoading, setWorkflowLoading] = useState(false);
-  const [workflowError, setWorkflowError] = useState<string | null>(null);
   // Contract
   const [applicationId, setApplicationId] = useState('');
   const [contractResult, setContractResult] = useState<any>(null);
@@ -52,20 +47,6 @@ const UtilitiesPage: React.FC = () => {
       setReceiptSuccess(null);
     } finally {
       setReceiptLoading(false);
-    }
-  };
-
-  const handleFixWorkflow = async () => {
-    setWorkflowLoading(true);
-    setWorkflowError(null);
-    setWorkflowResult(null);
-    try {
-      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/workflow-service/api/v1/workflow/fix`, { workflowId });
-      setWorkflowResult(res.data);
-    } catch (e: any) {
-      setWorkflowError(e.response?.data?.message || e.message);
-    } finally {
-      setWorkflowLoading(false);
     }
   };
 
@@ -139,32 +120,6 @@ const UtilitiesPage: React.FC = () => {
         </Box>
         {contractError && <Alert severity="error" sx={{ mb: 2 }}>{contractError}</Alert>}
         {contractSuccess && <Alert severity="success" sx={{ mb: 2 }}>{contractSuccess}</Alert>}
-      </Paper>
-      <Paper sx={{ p: 4, borderRadius: 3, mt:2 }} elevation={0}>
-        <Typography variant="h6" fontWeight="bold" color="primary" gutterBottom>
-          Fix Workflow
-        </Typography>
-        <Box display="flex" gap={2} alignItems="center" mb={2}>
-          <TextField
-            label="Workflow ID"
-            value={workflowId}
-            onChange={e => setWorkflowId(e.target.value)}
-            size="small"
-            sx={{ minWidth: 200 }}
-          />
-          <Button variant="contained" color="primary" onClick={handleFixWorkflow} disabled={workflowLoading || !workflowId}>
-            {workflowLoading ? <CircularProgress size={22} color="inherit" /> : 'Fix'}
-          </Button>
-        </Box>
-        {workflowError && <Alert severity="error" sx={{ mb: 2 }}>{workflowError}</Alert>}
-        {workflowResult && (
-          <Box mt={2}>
-            <Typography variant="subtitle2" color="text.secondary">Result:</Typography>
-            <Paper sx={{ p: 2, mt: 1, background: theme.palette.background.default, fontSize: 14, overflowX: 'auto' }}>
-              <pre style={{ margin: 0 }}>{JSON.stringify(workflowResult, null, 2)}</pre>
-            </Paper>
-          </Box>
-        )}
       </Paper>
     </Box>
   );

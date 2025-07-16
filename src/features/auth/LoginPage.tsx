@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { setRefreshToken } from '../authSlice';
+import { setRefreshToken } from './authSlice';
 import { Card, CardContent, Typography, Button, Box, TextField, useTheme } from '@mui/material';
 
 const LoginPage: React.FC<{ errorMsg?: string }> = ({ errorMsg }) => {

@@ -4,7 +4,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import axios from 'axios';
 import { useSelector } from 'react-redux';
-import { RootState } from '../store';
+import { RootState } from '../../app/store';
 
 const CompanyPermissionsPage: React.FC = () => {
   const theme = useTheme();
@@ -37,7 +37,7 @@ const CompanyPermissionsPage: React.FC = () => {
               <TableRow sx={{ background: theme.palette.action.hover }}>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>ID</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Type</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Active</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Status</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -47,9 +47,33 @@ const CompanyPermissionsPage: React.FC = () => {
                   <TableCell>{row.name || '-'}</TableCell>
                   <TableCell>
                     {row.active ? (
-                      <CheckCircleIcon sx={{ color: '#006635' }} />
+                      <Box component="span" sx={{
+                        bgcolor: '#e6f4ea',
+                        color: '#006635',
+                        px: 1.5,
+                        py: 0.5,
+                        borderRadius: 2,
+                        fontWeight: 700,
+                        fontSize: '0.95rem',
+                        letterSpacing: 0.5,
+                        display: 'inline-block',
+                      }}>
+                        Active
+                      </Box>
                     ) : (
-                      <CancelIcon sx={{ color: '#d32f2f' }} />
+                      <Box component="span" sx={{
+                        bgcolor: '#fdeaea',
+                        color: '#d32f2f',
+                        px: 1.5,
+                        py: 0.5,
+                        borderRadius: 2,
+                        fontWeight: 700,
+                        fontSize: '0.95rem',
+                        letterSpacing: 0.5,
+                        display: 'inline-block',
+                      }}>
+                        Inactive
+                      </Box>
                     )}
                   </TableCell>
                 </TableRow>

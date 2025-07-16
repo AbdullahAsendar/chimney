@@ -3,6 +3,7 @@ import axios from 'axios';
 
 interface UserInfo {
   username: string;
+  email: string;
 }
 
 interface AuthState {
@@ -147,7 +148,7 @@ const authSlice = createSlice({
       })
       .addCase(fetchUserInfo.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        state.user = { username: action.payload.result.name };
+        state.user = { username: action.payload.result.name, email: action.payload.result.email };
         state.error = null;
       })
       .addCase(fetchUserInfo.rejected, (state, action) => {

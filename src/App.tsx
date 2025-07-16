@@ -1,127 +1,30 @@
 import React, { useEffect } from "react";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { ThemeProvider } from "@mui/material/styles";
+import { getTheme } from "./app/theme";
+import { HashRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import { RootState } from "./store";
-import { fetchAccessToken, fetchUserInfo, fetchAccountId } from "./authSlice";
-import LoginPage from "./pages/LoginPage";
-import ClearCachePage from "./pages/ClearCachePage";
-import LandingPage from "./pages/LandingPage";
-import CompanyPermissionsPage from "./pages/CompanyPermissionsList";
-import Drawer from "@mui/material/Drawer";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import HomeIcon from '@mui/icons-material/Home';
-import BusinessIcon from '@mui/icons-material/Business';
-import CachedIcon from '@mui/icons-material/Cached';
+import { RootState } from "./app/store";
+import { fetchAccessToken, fetchUserInfo, fetchAccountId } from "./features/auth/authSlice";
+import LoginPage from "./features/auth/LoginPage";
+import ClearCachePage from "./features/utilities/ClearCachePage";
+import CompanyPermissionsPage from "./features/permissions/CompanyPermissionsPage";
 import LogoutIcon from '@mui/icons-material/Logout';
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import GlobalStyles from '@mui/material/GlobalStyles';
 import Player from 'lottie-react';
-import loadingAnimation from '../public/loadingAnimation.json';
-import UtilitiesPage from './pages/UtilitiesPage';
-import BuildIcon from '@mui/icons-material/Build';
+import loadingAnimation from './assets/loadingAnimation.json';
+import UtilitiesPage from './features/utilities/UtilitiesPage';
 import Avatar from '@mui/material/Avatar';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
-import MenuOpenIcon from '@mui/icons-material/MenuOpen';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import { useTheme } from '@mui/material/styles';
+import LandingPage from "./features/auth/LandingPage";
+import Sidebar from "./components/layout/Sidebar";
 
-const drawerWidth = 280;
-
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: { main: '#006635' },
-    secondary: { main: '#006635' },
-    background: { default: '#f3f3f8', paper: '#fff' },
-    text: { primary: '#2c332f', secondary: '#2c332f' },
-  },
-  typography: {
-    fontFamily: 'Inter, Roboto, Arial, sans-serif',
-    h1: { fontWeight: 800 },
-    h2: { fontWeight: 700 },
-    h3: { fontWeight: 700 },
-    h4: { fontWeight: 700 },
-    h5: { fontWeight: 700 },
-    h6: { fontWeight: 700 },
-    button: { fontWeight: 700, textTransform: 'none' },
-  },
-  shape: { borderRadius: 3 },
-});
-
-function DrawerNav({ collapsed, onToggle }: { collapsed: boolean, onToggle: () => void }) {
-  const { user } = useSelector((state: RootState) => state.auth);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const navItems = [
-    { text: 'Home', icon: <HomeIcon />, path: '/' },
-    { text: 'Company Permissions', icon: <BusinessIcon />, path: '/company-permissions' },
-    { text: 'Clear Cache', icon: <CachedIcon />, path: '/clear-cache' },
-    { text: 'Utilities', icon: <BuildIcon />, path: '/utilities' },
-  ];
-  return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: collapsed ? 72 : drawerWidth,
-        flexShrink: 0,
-        [`& .MuiDrawer-paper`]: {
-          width: collapsed ? 72 : drawerWidth,
-          boxSizing: 'border-box',
-          background: '#fff',
-          borderRight: '1px solid #e0e0e0',
-          transition: 'width 0.2s',
-        },
-      }}
-    >
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', p: 3, pb: 2 }}>
-          <Typography
-            variant="h5"
-            fontWeight={900}
-            color="primary"
-            sx={{ letterSpacing: 1, cursor: 'pointer', opacity: collapsed ? 0 : 1, transition: 'opacity 0.2s', whiteSpace: 'nowrap', overflow: 'hidden' }}
-            onClick={() => navigate("/")}
-          >
-            Chimney
-          </Typography>
-          <IconButton onClick={onToggle} size="small" sx={{ ml: collapsed ? 0 : 1 }}>
-            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
-          </IconButton>
-        </Box>
-        <List>
-          {navItems.map(item => (
-            <ListItem key={item.text} disablePadding sx={{ display: 'block' }}>
-              <ListItemButton
-                selected={location.pathname === item.path}
-                onClick={() => navigate(item.path)}
-                sx={{
-                  pl: 2,
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  minHeight: 48,
-                  borderRadius: 2,
-                }}
-              >
-                <ListItemIcon sx={{ color: location.pathname === item.path ? theme.palette.primary.main : '#888', minWidth: 0, mr: collapsed ? 0 : 2, justifyContent: 'center' }}>{item.icon}</ListItemIcon>
-                {!collapsed && <ListItemText primary={item.text} primaryTypographyProps={{ fontWeight: location.pathname === item.path ? 700 : 500 }} />}
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
-        <Box flexGrow={1} />
-      </Box>
-    </Drawer>
-  );
-}
+const theme = getTheme('light');
 
 // HeaderBar component to be rendered inside Router
 function HeaderBar({ user, anchorEl, handleMenuOpen, handleMenuClose, handleLogout }: {
@@ -155,32 +58,13 @@ function HeaderBar({ user, anchorEl, handleMenuOpen, handleMenuClose, handleLogo
       position: 'sticky',
       top: 0,
       zIndex: 1100,
+      borderRadius: 0
     }}>
       <Box sx={{ flex: 1, display: 'flex', alignItems: 'center' }}>
         <Typography >
           {currentTitle}
         </Typography>
       </Box>
-      {user && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <IconButton onClick={handleMenuOpen} sx={{ p: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Avatar sx={{ bgcolor: theme.palette.primary.main, color: '#fff', fontWeight: 700 }}>
-              {user.username?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0,2)}
-            </Avatar>
-          </IconButton>
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          >
-            <MenuItem onClick={handleLogout} sx={{ color: theme.palette.error.main, fontWeight: 700 }}>
-              <LogoutIcon sx={{ mr: 1 }} /> Logout
-            </MenuItem>
-          </Menu>
-        </Box>
-      )}
     </Paper>
   );
 }
@@ -295,13 +179,13 @@ export const App = () => {
   return (
     <ThemeProvider theme={theme}>
       <GlobalStyles styles={{
-        'html': { height: '100%', margin: 0, padding: 0, background: theme.palette.background.default, overflow: 'hidden' },
-        'body': { height: '100%', margin: 0, padding: 0, background: theme.palette.background.default, overflow: 'hidden' },
-        '#root': { height: '100%', margin: 0, padding: 0, background: theme.palette.background.default, overflow: 'hidden' },
+        'html': { height: '100%', margin: 0, padding: 0, background: theme.palette.background.default },
+        'body': { height: '100%', margin: 0, padding: 0, background: theme.palette.background.default },
+        '#root': { height: '100%', margin: 0, padding: 0, background: theme.palette.background.default },
       }} />
       <Router>
-        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: theme.palette.background.default, m: 0, p: 0, boxShadow: 'none', border: 'none', overflow: 'hidden' }}>
-          <DrawerNav collapsed={drawerCollapsed} onToggle={handleDrawerToggle} />
+        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: theme.palette.background.default, m: 0, p: 0, boxShadow: 'none', border: 'none' }}>
+          <Sidebar collapsed={drawerCollapsed} onToggle={handleDrawerToggle} />
           <Box component="main" sx={{ flexGrow: 1, p: 0, bgcolor: theme.palette.background.default, color: theme.palette.text.primary, minHeight: '100vh', m: 0, boxShadow: 'none', border: 'none', overflowX: 'auto', overflowY: 'auto', position: 'relative', transition: 'none' }}>
             <HeaderBar
               user={user}
