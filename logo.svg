@@ -1,0 +1,12 @@
+<svg width="80" height="80" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Chimney logo">
+  <!-- Chimney body -->
+  <rect x="20" y="20" width="30" height="60" fill="#4A90E2" rx="5" ry="5"/>
+  <rect x="28" y="10" width="14" height="20" fill="#357ABD" rx="3" ry="3"/>
+  
+  <!-- Chimney top curve -->
+  <path d="M35 10 C33 2, 27 2, 25 10" stroke="#357ABD" stroke-width="3" fill="none" />
+  
+  <!-- Smoke lines -->
+  <path d="M40 5 C42 0, 38 0, 40 5" stroke="#AAA" stroke-width="2" fill="none"/>
+  <path d="M44 3 C46 -2, 42 -2, 44 3" stroke="#AAA" stroke-width="2" fill="none"/>
+</svg> 
