@@ -29,10 +29,10 @@ const initialState: AuthState = {
 // 1. Call refresh token API to get access token
 export const fetchAccessToken = createAsyncThunk(
   'auth/fetchAccessToken',
-  async (refreshToken: string, { rejectWithValue }) => {
+  async ({ refreshToken, apiBaseUrl }: { refreshToken: string; apiBaseUrl: string }, { rejectWithValue }) => {
     try {
       const response = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/authentication-service/api/v1/auth/sdd/refresh`,
+        `${apiBaseUrl}/authentication-service/api/v1/auth/sdd/refresh`,
         { refToken: refreshToken },
         { headers: { 'Content-Type': 'application/json', accept: '*/*' } }
       );
@@ -54,10 +54,10 @@ export const fetchAccessToken = createAsyncThunk(
 // 2. Use access token to get super admin account id
 export const fetchAccountId = createAsyncThunk(
   'auth/fetchAccountId',
-  async (accessToken: string, { rejectWithValue }) => {
+  async ({ accessToken, apiBaseUrl }: { accessToken: string; apiBaseUrl: string }, { rejectWithValue }) => {
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_BASE_URL}/authentication-service/api/v1/auth/account/admin/super`,
+        `${apiBaseUrl}/authentication-service/api/v1/auth/account/admin/super`,
         {
           headers: {
             'accept': '*/*',
@@ -81,10 +81,10 @@ export const fetchAccountId = createAsyncThunk(
 
 export const fetchUserInfo = createAsyncThunk(
   'auth/fetchUserInfo',
-  async (accessToken: string, { rejectWithValue }) => {
+  async ({ accessToken, apiBaseUrl }: { accessToken: string; apiBaseUrl: string }, { rejectWithValue }) => {
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_BASE_URL}/authentication-service/api/v1/auth`,
+        `${apiBaseUrl}/authentication-service/api/v1/auth`,
         { headers: { 'accept': '*/*', 'sdd-token': accessToken } }
       );
       return response.data;

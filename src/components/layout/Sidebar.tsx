@@ -56,17 +56,16 @@ const Sidebar = ({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             transition: 'width 0.2s',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between',
-          },
+            justifyContent: 'space-between'          },
         }}
       >
         <Box>
           <Box onClick={onToggle} sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', justifyContent: collapsed ? 'center' : 'flex-start', px: 2, py: 2, position: 'relative' }}>
-            <img src="logo.svg" alt="Chimney Logo" style={{ width: 40, height: 40 }} />
+            {collapsed &&
+              <img src="logo.svg" alt="Chimney Logo" style={{ width: 40, height: 40 }} />
+            }
             {!collapsed && (
-              <Typography variant="h6" sx={{ fontWeight: 800, ml: 1.5, color: theme.palette.primary.main, letterSpacing: 1 }}>
-                Chimney
-              </Typography>
+              <img src="logo-full.svg" alt="Chimney Logo" style={{ width: 150 }} />
             )}
           </Box>
           <Divider />
@@ -80,7 +79,7 @@ const Sidebar = ({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
                       selected={active}
                       onClick={() => navigate(item.path)}
                       sx={{
-                        minHeight: 48,
+                        minHeight: 55,
                         justifyContent: collapsed ? 'center' : 'flex-start',
                         px: collapsed ? 0 : 2.5,
                         borderRadius: 0,
@@ -89,22 +88,9 @@ const Sidebar = ({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
                         '&:hover': {
                           background: theme.palette.action.hover,
                         },
-                        ...(active && {
-                          background: theme.palette.action.selected,
-                          '&:before': {
-                            content: '""',
-                            position: 'absolute',
-                            left: 0,
-                            top: 6,
-                            bottom: 6,
-                            width: 4,
-                            borderRadius: 0,
-                            background: theme.palette.primary.main,
-                          },
-                        }),
                       }}
                     >
-                      <ListItemIcon sx={{ minWidth: 0, mr: collapsed ? 0 : 2, display: 'flex', justifyContent: 'center', color: active ? theme.palette.primary.main : theme.palette.text.secondary }}>
+                      <ListItemIcon sx={{ minWidth: 0, mr: collapsed ? 0 : 2, display: 'flex', justifyContent: 'center', color: active ? theme.palette.primary.main : '#b0bac7' }}>
                         {item.icon}
                       </ListItemIcon>
                       {!collapsed && <ListItemText primary={item.text} sx={{ opacity: 1, fontWeight: 600 }} />}
@@ -132,7 +118,7 @@ const Sidebar = ({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
                 <Typography variant="subtitle1" noWrap sx={{ fontWeight: 700, textAlign: 'left', maxWidth: 140, mt: 0, mb: 0 }}>
                   {user?.username || 'User Name'}
                 </Typography>
-                <Typography variant="caption" noWrap sx={{ color: theme.palette.text.secondary, textAlign: 'left', maxWidth: 140, mt: 0, mb: 0 }}>
+                <Typography variant="caption" noWrap sx={{ textAlign: 'left', maxWidth: 140, mt: 0, mb: 0 }}>
                   {user?.email || 'user@email.com'}
                 </Typography>
               </Box>

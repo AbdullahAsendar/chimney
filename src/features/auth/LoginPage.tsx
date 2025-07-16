@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { setRefreshToken } from './authSlice';
 import { Card, CardContent, Typography, Button, Box, TextField, useTheme } from '@mui/material';
+import { useEnvironment } from '../../contexts/EnvironmentContext';
+import EnvironmentToggle from '../../components/EnvironmentToggle';
 
 const LoginPage: React.FC<{ errorMsg?: string }> = ({ errorMsg }) => {
   const [token, setToken] = useState('');
   const dispatch = useDispatch();
   const theme = useTheme();
+  const { isProduction, toggleEnvironment } = useEnvironment();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,7 +19,10 @@ const LoginPage: React.FC<{ errorMsg?: string }> = ({ errorMsg }) => {
   };
 
   return (
-    <Box display="flex" alignItems="center" justifyContent="center" height="100vh" bgcolor={theme.palette.background.default}>
+    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100vh" bgcolor={theme.palette.background.default}>
+      <Box sx={{ position: 'absolute', top: 20, right: 20 }}>
+        <EnvironmentToggle isProduction={isProduction} onToggle={toggleEnvironment} isLoginPage={true} />
+      </Box>
       <Card
         sx={{
           minWidth: 350,

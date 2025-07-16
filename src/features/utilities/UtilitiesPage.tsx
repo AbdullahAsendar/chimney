@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Box, Typography, Paper, TextField, Button, useTheme, CircularProgress, Alert } from '@mui/material';
 import axios from 'axios';
+import { useEnvironment } from '../../contexts/EnvironmentContext';
 
 const UtilitiesPage: React.FC = () => {
   const theme = useTheme();
+  const { apiBaseUrl } = useEnvironment();
   // Receipt
   const [receiptAppId, setReceiptAppId] = useState('');
   const [receiptResult, setReceiptResult] = useState<any>(null);
@@ -24,7 +26,7 @@ const UtilitiesPage: React.FC = () => {
     setReceiptSuccess(null);
     try {
       const res = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/worker-service/api/v1/task/register?type=DOWNLOAD_RECEIPT`,
+        `${apiBaseUrl}/worker-service/api/v1/task/register?type=DOWNLOAD_RECEIPT`,
         { applicationId: Number(receiptAppId) },
         {
           headers: {
@@ -57,7 +59,7 @@ const UtilitiesPage: React.FC = () => {
     setContractSuccess(null);
     try {
       const res = await axios.get(
-        `${import.meta.env.VITE_API_BASE_URL}/workflow-service/api/v1/application/${applicationId}/document/regenerate?documentType=CONTRACT`,
+        `${apiBaseUrl}/workflow-service/api/v1/application/${applicationId}/document/regenerate?documentType=CONTRACT`,
         {
           headers: {
             'accept': '*/*',
@@ -82,7 +84,7 @@ const UtilitiesPage: React.FC = () => {
   };
 
   return (
-    <Box display="flex" flexDirection="column" alignItems="stretch" justifyContent="flex-start" bgcolor={theme.palette.background.default} px={2} width="100%" gap={0}>
+    <Box display="flex" flexDirection="column" alignItems="stretch" justifyContent="flex-start" bgcolor={theme.palette.background.default} width="100%" gap={0}>
       <Paper sx={{ p: 4, borderRadius: 3 }} elevation={0}>
         <Typography variant="h6" fontWeight="bold" color="primary" gutterBottom>
           Fetch Receipt

@@ -17,12 +17,12 @@ const baseTheme: ThemeOptions = {
     h6: { fontWeight: 700 },
     button: { fontWeight: 700, textTransform: 'none' },
   },
-  shape: { borderRadius: 8 },
+  shape: { borderRadius: 3 },
   components: {
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 6,
+          borderRadius: 3,
           fontWeight: 700,
         },
       },
@@ -30,7 +30,7 @@ const baseTheme: ThemeOptions = {
     MuiPaper: {
       styleOverrides: {
         root: {
-          borderRadius: 12,
+          borderRadius: 3,
         },
       },
     },

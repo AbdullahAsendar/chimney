@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import { Provider } from "react-redux";
 import { store } from "./app/store";
+import { EnvironmentProvider } from "./contexts/EnvironmentContext";
 import axios from "axios";
 
 // Add global axios interceptor for account-id and sdd-token from Redux store
@@ -24,7 +25,9 @@ axios.interceptors.request.use((config) => {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <Provider store={store}>
-      <App />
+      <EnvironmentProvider>
+        <App />
+      </EnvironmentProvider>
     </Provider>
   </React.StrictMode>,
 );

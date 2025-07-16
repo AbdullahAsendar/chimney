@@ -8,21 +8,18 @@ import { fetchAccessToken, fetchUserInfo, fetchAccountId } from "./features/auth
 import LoginPage from "./features/auth/LoginPage";
 import ClearCachePage from "./features/utilities/ClearCachePage";
 import CompanyPermissionsPage from "./features/permissions/CompanyPermissionsPage";
-import LogoutIcon from '@mui/icons-material/Logout';
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import GlobalStyles from '@mui/material/GlobalStyles';
 import Player from 'lottie-react';
 import loadingAnimation from './assets/loadingAnimation.json';
 import UtilitiesPage from './features/utilities/UtilitiesPage';
-import Avatar from '@mui/material/Avatar';
-import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import { useTheme } from '@mui/material/styles';
 import LandingPage from "./features/auth/LandingPage";
 import Sidebar from "./components/layout/Sidebar";
+import { EnvironmentProvider, useEnvironment } from "./contexts/EnvironmentContext";
+import EnvironmentToggle from "./components/EnvironmentToggle";
 
 const theme = getTheme('light');
 
@@ -34,8 +31,8 @@ function HeaderBar({ user, anchorEl, handleMenuOpen, handleMenuClose, handleLogo
   handleMenuClose: () => void,
   handleLogout: () => void,
 }) {
-  const theme = useTheme();
   const location = useLocation();
+  const { isProduction, toggleEnvironment } = useEnvironment();
   const pageTitles: Record<string, string> = {
     '/': 'Home',
     '/company-permissions': 'Company Permissions',
@@ -65,6 +62,7 @@ function HeaderBar({ user, anchorEl, handleMenuOpen, handleMenuClose, handleLogo
           {currentTitle}
         </Typography>
       </Box>
+      <EnvironmentToggle isProduction={isProduction} onToggle={toggleEnvironment} />
     </Paper>
   );
 }
@@ -72,6 +70,7 @@ function HeaderBar({ user, anchorEl, handleMenuOpen, handleMenuClose, handleLogo
 export const App = () => {
   const dispatch = useDispatch();
   const { refreshToken, accessToken, accountId, user, status, error, accountIdStatus } = useSelector((state: RootState) => state.auth);
+  const { apiBaseUrl } = useEnvironment();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [drawerCollapsed, setDrawerCollapsed] = React.useState(false);
   const handleDrawerToggle = () => setDrawerCollapsed(c => !c);
@@ -88,23 +87,23 @@ export const App = () => {
 
   useEffect(() => {
     if (refreshToken && !accessToken && status === 'idle') {
-      dispatch(fetchAccessToken(refreshToken) as any);
+      dispatch(fetchAccessToken({ refreshToken, apiBaseUrl }) as any);
     }
-  }, [refreshToken, accessToken, status, dispatch]);
+  }, [refreshToken, accessToken, status, dispatch, apiBaseUrl]);
 
   // Fetch accountId after accessToken is available
   useEffect(() => {
     if (accessToken && !accountId) {
-      dispatch(fetchAccountId(accessToken) as any);
+      dispatch(fetchAccountId({ accessToken, apiBaseUrl }) as any);
     }
-  }, [accessToken, accountId, dispatch]);
+  }, [accessToken, accountId, dispatch, apiBaseUrl]);
 
   // Fetch user info after both accessToken and accountId are available
   useEffect(() => {
     if (accessToken && accountId && !user) {
-      dispatch(fetchUserInfo(accessToken) as any);
+      dispatch(fetchUserInfo({ accessToken, apiBaseUrl }) as any);
     }
-  }, [accessToken, accountId, user, dispatch]);
+  }, [accessToken, accountId, user, dispatch, apiBaseUrl]);
 
   if (!refreshToken) {
     return (
@@ -156,7 +155,7 @@ export const App = () => {
             Chimney
           </Typography>
           <Typography color={theme.palette.error.main} variant="body1" align="center" mb={2} fontWeight={600}>
-            A super admin account is required to use this tool. Please ensure a super admin account exists.
+            Access Denied: This application requires super admin privileges. Please contact your system administrator to grant the necessary permissions or verify your account has the correct role assigned.
           </Typography>
         </Box>
       </Box>

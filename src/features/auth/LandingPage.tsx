@@ -142,7 +142,7 @@ const LandingPage: React.FC = () => {
             text: 'Built for stability and peace of mind, even at scale.'
           },
         ].map((feature, idx) => (
-          <Card key={idx} sx={{ flex: '1 1 320px', maxWidth: 345, borderRadius: 3, boxShadow: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', p: 3, transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-6px)', boxShadow: 6 } }}>
+          <Card key={idx} sx={{ flex: '1 1 320px', maxWidth: 345, borderRadius: 3, boxShadow: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', p: 3 }}>
             {feature.icon}
             <Typography variant="h6" fontWeight={700} mt={2} mb={1} align="center">{feature.title}</Typography>
             <Typography variant="body2" color="text.secondary" align="center">{feature.text}</Typography>
