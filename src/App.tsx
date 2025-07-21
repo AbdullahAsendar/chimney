@@ -20,6 +20,8 @@ import LandingPage from "./features/auth/LandingPage";
 import Sidebar from "./components/layout/Sidebar";
 import { EnvironmentProvider, useEnvironment } from "./contexts/EnvironmentContext";
 import EnvironmentToggle from "./components/EnvironmentToggle";
+import CustomersPage from './features/customers/CustomersPage';
+import WorkerTaskPage from './features/workerTask/WorkerTaskPage';
 
 const theme = getTheme('light');
 
@@ -36,6 +38,8 @@ function HeaderBar({ user, anchorEl, handleMenuOpen, handleMenuClose, handleLogo
   const pageTitles: Record<string, string> = {
     '/': 'Home',
     '/workflow-builder': 'Workflow Builder',
+    '/customers': 'Customers',
+    '/worker-tasks': 'Worker Tasks',
     '/clear-cache': 'Clear Cache',
     '/utilities': 'Utilities',
   };
@@ -197,6 +201,8 @@ export const App = () => {
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/workflow-builder" element={<WorkflowBuilder />} />
+              <Route path="/customers" element={<CustomersPage />} />
+              <Route path="/worker-tasks" element={<WorkerTaskPage />} />
               <Route path="/clear-cache" element={<ClearCachePage />} />
               <Route path="/utilities" element={<UtilitiesPage />} />
               <Route path="*" element={<Navigate to="/" />} />

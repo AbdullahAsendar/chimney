@@ -24,6 +24,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../app/store';
 import { useEnvironment } from '../../contexts/EnvironmentContext';
+import PeopleIcon from '@mui/icons-material/People';
+import WorkIcon from '@mui/icons-material/Work';
 
 const drawerWidth = 260;
 
@@ -37,6 +39,8 @@ const Sidebar = ({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   const navItems = [
     { text: 'Home', icon: <HomeIcon />, path: '/' },
     ...(isProduction ? [] : [{ text: 'Workflow Builder', icon: <AccountTreeIcon />, path: '/workflow-builder' }]),
+    { text: 'Customers', icon: <PeopleIcon />, path: '/customers' },
+    { text: 'Worker Tasks', icon: <WorkIcon />, path: '/worker-tasks' },
     { text: 'Utilities', icon: <BuildIcon />, path: '/utilities' },
     { text: 'Clear Cache', icon: <CachedIcon />, path: '/clear-cache' },
   ];
