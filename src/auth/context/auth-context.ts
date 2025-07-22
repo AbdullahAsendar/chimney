@@ -9,7 +9,7 @@ export const AuthContext = createContext<{
   saveAuth: (auth: AuthModel | undefined) => void;
   user?: UserModel;
   setUser: React.Dispatch<React.SetStateAction<UserModel | undefined>>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (refreshToken: string) => Promise<void>;
   register: (
     email: string,
     password: string,

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { AuthAdapter } from '@/auth/adapters/supabase-adapter';
 import { useAuth } from '@/auth/context/auth-context';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Alert, AlertIcon, AlertTitle } from '@/components/ui/alert';
@@ -7,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LoaderCircleIcon, AlertCircle, X, Clipboard } from 'lucide-react';
 import { AccountDeactivatedDialog } from '@/partials/dialogs/account-deactivated-dialog';
+import { toAbsoluteUrl } from '@/lib/helpers';
 
 export function SignInPage() {
   const [searchParams] = useSearchParams();
@@ -29,7 +29,7 @@ export function SignInPage() {
     try {
       const text = await navigator.clipboard.readText();
       setRefreshToken(text);
-    } catch (err) {
+    } catch {
       setError('Failed to read clipboard.');
     }
   };
@@ -47,8 +47,8 @@ export function SignInPage() {
       await login(refreshToken);
       const nextPath = searchParams.get('next') || '/';
       navigate(nextPath, { replace: true });
-    } catch (err: any) {
-      if (err && err.code === 'NO_ACCOUNT') {
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'code' in err && err.code === 'NO_ACCOUNT') {
         setShowDeactivated(true);
       } else {
         setError(
@@ -65,7 +65,7 @@ export function SignInPage() {
       <div className="flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-800">
         <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 flex flex-col items-center">
           <img
-            src="/media/app/mini-logo.svg"
+            src={toAbsoluteUrl('/media/app/mini-logo.svg')}
             alt="Chimney Logo"
             className="w-16 h-16 mb-4"
           />
