@@ -1,14 +1,17 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from 'node:url';
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  server: {
-    host: true,
+  plugins: [react(), tailwindcss()],
+  base: '/chimney/',
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
   },
   build: {
-    sourcemap: true, // or false if you don't need sourcemaps
+    chunkSizeWarningLimit: 3000,
   },
-  base: "/chimney/",
 });
