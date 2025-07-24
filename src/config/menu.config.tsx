@@ -7,6 +7,7 @@ import {
   FileWarning,
   Inspect,
   RefreshCw,
+  Shield,
 } from 'lucide-react';
 import { type MenuConfig } from './types';
 
@@ -31,12 +32,17 @@ export const MENU_SIDEBAR: MenuConfig = [
     title: 'Worker Tasks',
     icon: Kanban,
     path: '/worker-tasks',
-              },
+  },
   {
     title: 'Blocks',
-    icon: FileWarning,
-    disabled: true,
-    path: '/worker-tasks',
+    icon: Shield,
+    children: [
+      {
+        title: 'Property Blocks',
+        icon: FileWarning,
+        path: '/property-blocks',
+      },
+    ],
   },
   {
     title: 'Prevalidations',
@@ -55,7 +61,4 @@ export const MENU_SIDEBAR: MenuConfig = [
     icon: Settings,
     path: '/utilities/tools',
   },
-
-  
-
 ];
