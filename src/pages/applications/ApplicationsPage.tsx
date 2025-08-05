@@ -15,6 +15,12 @@ const ApplicationsPage = () => (
   enableCreate={true}
   enableEdit={true}
   enableDelete={true}
+  predefinedFields={{
+    status: { 
+      type: 'single', 
+      options: ['DRAFT', 'RETURNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'DISCARDED', 'PAUSED', 'REJECTED'] 
+    }
+  }}
 />
 );
 

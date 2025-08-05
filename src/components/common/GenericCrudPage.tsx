@@ -64,7 +64,7 @@ interface GenericCrudPageProps {
   enableEdit?: boolean;
   enableDelete?: boolean;
   editAllAttributes?: boolean;
-  predefinedFields?: Record<string, string[]>; // fieldName -> array of possible values
+  predefinedFields?: Record<string, string[] | { type: 'single' | 'multi'; options: string[] }>; // fieldName -> array of possible values or object with type and options
   updateableFields?: string[]; // fields that can be updated, if not provided all fields are updateable
 }
 
@@ -198,9 +198,17 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
     setEditRow(row);
     const initialForm = editFields.reduce((acc, f) => {
       let value = row[f] ?? '';
-      // Convert predefined fields to array if they're strings
-      if (predefinedFields[f] && typeof value === 'string' && value) {
-        value = value.split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0);
+      // Handle predefined fields based on their type
+      if (predefinedFields[f]) {
+        const fieldConfig = predefinedFields[f];
+        const isMultiSelect = Array.isArray(fieldConfig);
+        const isSingleSelect = !isMultiSelect && (fieldConfig as any).type === 'single';
+        
+        if (isMultiSelect && typeof value === 'string' && value) {
+          // Convert multi-select fields to array
+          value = value.split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0);
+        }
+        // For single select, keep as string (no conversion needed)
       }
       return { ...acc, [f]: value };
     }, {});
@@ -210,7 +218,19 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
 
 
   const handleEditFormChange = (field: string, value: any) => {
-    setEditForm((prev: any) => ({ ...prev, [field]: value }));
+    // Format date fields to YYYY-MM-DD for display
+    let formattedValue = value;
+    if (field.toLowerCase().includes('date') && value) {
+      try {
+        const date = new Date(value);
+        if (!isNaN(date.getTime())) {
+          formattedValue = date.toISOString().split('T')[0];
+        }
+      } catch (e) {
+        // If date parsing fails, keep original value
+      }
+    }
+    setEditForm((prev: any) => ({ ...prev, [field]: formattedValue }));
   };
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,13 +255,18 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
         );
       }
       
-      // Convert predefined fields from string to array if they exist
+      // Handle predefined fields based on their type when sending to API
       Object.keys(filteredAttributes).forEach(field => {
-        if (predefinedFields[field] && typeof filteredAttributes[field] === 'string') {
-          filteredAttributes[field] = filteredAttributes[field]
-            .split(',')
-            .map((value: string) => value.trim())
-            .filter((value: string) => value.length > 0);
+        if (predefinedFields[field]) {
+          const fieldConfig = predefinedFields[field];
+          const isMultiSelect = Array.isArray(fieldConfig);
+          const isSingleSelect = !isMultiSelect && (fieldConfig as any).type === 'single';
+          
+          if (isMultiSelect && Array.isArray(filteredAttributes[field])) {
+            // Convert multi-select arrays to comma-separated string for API
+            filteredAttributes[field] = filteredAttributes[field].join(',');
+          }
+          // For single select, keep as string (no conversion needed)
         }
       });
       const payload = {
@@ -273,11 +298,28 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       ...fields.map(f => ({
         accessorKey: f,
         header: ({ column }: any) => <DataGridColumnHeader title={f.charAt(0).toUpperCase() + f.slice(1)} column={column} />, 
-        cell: (info: any) => (
-          <div style={{ wordBreak: 'break-word', maxWidth: 320, whiteSpace: 'pre-wrap' }}>
-            {typeof info.getValue() === 'object' ? JSON.stringify(info.getValue(), null, 2) : String(info.getValue())}
-          </div>
-        ),
+        cell: (info: any) => {
+          const value = info.getValue();
+          let displayValue = value;
+          
+          // Format date fields to YYYY-MM-DD
+          if (f.toLowerCase().includes('date') && value) {
+            try {
+              const date = new Date(value);
+              if (!isNaN(date.getTime())) {
+                displayValue = date.toISOString().split('T')[0];
+              }
+            } catch (e) {
+              // If date parsing fails, keep original value
+            }
+          }
+          
+          return (
+            <div style={{ wordBreak: 'break-word', maxWidth: 320, whiteSpace: 'pre-wrap' }}>
+              {typeof displayValue === 'object' ? JSON.stringify(displayValue, null, 2) : String(displayValue)}
+            </div>
+          );
+        },
         enableSorting: true, 
         meta: { headerClassName: '' },
       })),
@@ -438,8 +480,8 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       </AlertDialog>
       {/* Edit dialog */}
       <Dialog open={!!editRow} onOpenChange={v => { if (!v) setEditRow(null); }}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader className="pb-6">
+        <DialogContent className="max-w-3xl p-0 overflow-hidden">
+          <DialogHeader className="pb-1 pt-8 px-8 bg-white dark:bg-slate-900">
             <div className="flex items-center justify-between">
               <div>
                 <DialogTitle className="text-2xl font-bold flex items-center gap-3">
@@ -454,107 +496,153 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
               </div>
               {editRow && (
                 <div className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
-                  ID: {editRow.id}
+                  {editRow.id}
                 </div>
               )}
             </div>
           </DialogHeader>
           
-          <form onSubmit={handleEditSubmit} className="space-y-6">
-            <div className="max-h-[65vh] overflow-y-auto pr-2 space-y-6">
-              {(editAllAttributes && editRow
-                ? Object.keys(editRow).filter(f => !['id', 'createTimestamp', 'updateTimestamp', 'createdByAccountId', 'updatedByAccountId', 'source', 'error', 'jobId'].includes(f))
-                : fields.filter(f => f !== 'id')
-              ).filter(f => !updateableFields || updateableFields.includes(f))
-              .sort((a, b) => {
-                // If updateableFields is provided, sort based on its order
-                if (updateableFields) {
-                  const aIndex = updateableFields.indexOf(a);
-                  const bIndex = updateableFields.indexOf(b);
-                  if (aIndex === -1 && bIndex === -1) return 0;
-                  if (aIndex === -1) return 1;
-                  if (bIndex === -1) return -1;
-                  return aIndex - bIndex;
-                }
-                return 0;
-              }).map((f) => (
-                <div key={f} className="space-y-3 p-4 rounded-lg border border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-semibold text-foreground flex items-center gap-2" htmlFor={`edit-${f}`}>
-                      {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
-                      <span className="text-xs text-muted-foreground font-normal">({f})</span>
-                    </label>
-                    {editForm[f] && typeof editForm[f] === 'string' && editForm[f].length > 0 && (
-                      <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
-                        <Check className="h-3 w-3" />
-                        Filled
-                      </div>
-                    )}
-                  </div>
+          <form onSubmit={handleEditSubmit}>
+            <div className="max-h-[65vh] overflow-y-auto px-8 py-8 bg-gray-50 dark:bg-slate-800/50">
+              <div className="space-y-6">
+                {(editAllAttributes && editRow
+                  ? Object.keys(editRow).filter(f => !['id', 'createTimestamp', 'updateTimestamp', 'createdByAccountId', 'updatedByAccountId', 'source', 'error', 'jobId'].includes(f))
+                  : fields.filter(f => f !== 'id')
+                ).filter(f => !updateableFields || updateableFields.includes(f))
+                .sort((a, b) => {
+                  // If updateableFields is provided, sort based on its order
+                  if (updateableFields) {
+                    const aIndex = updateableFields.indexOf(a);
+                    const bIndex = updateableFields.indexOf(b);
+                    if (aIndex === -1 && bIndex === -1) return 0;
+                    if (aIndex === -1) return 1;
+                    if (bIndex === -1) return -1;
+                    return aIndex - bIndex;
+                  }
+                  return 0;
+                }).map((f) => (
+                  <div key={f} className="space-y-3">
+                  <label className="text-sm font-semibold text-foreground" htmlFor={`edit-${f}`}>
+                    {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
+                  </label>
                   {predefinedFields[f] ? (
-                    <div className="space-y-4">
-                      <div className="text-xs text-muted-foreground flex items-center gap-2">
-                        <AlertCircle className="h-3 w-3" />
-                        Select one or more options:
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {predefinedFields[f].map((value: string) => {
+                    <div className="space-y-3">
+                      {(() => {
+                        const fieldConfig = predefinedFields[f];
+                        const isMultiSelect = Array.isArray(fieldConfig);
+                        const options = isMultiSelect ? fieldConfig : (fieldConfig as any).options;
+                        const isSingleSelect = !isMultiSelect && (fieldConfig as any).type === 'single';
+                        
+                        if (isSingleSelect) {
+                          // Single select implementation
+                          const currentValue = editForm[f] || '';
+                          return (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {options.map((value: string) => (
+                                <div key={value} className={`flex items-center space-x-3 p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
+                                  currentValue === value
+                                    ? 'border-primary bg-primary/5 text-primary' 
+                                    : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                                }`}>
+                                  <div className="relative">
+                                    <input
+                                      type="radio"
+                                      name={f}
+                                      id={`${f}-${value}`}
+                                      value={value}
+                                      checked={currentValue === value}
+                                      onChange={(e) => handleEditFormChange(f, e.target.value)}
+                                      disabled={editLoading}
+                                      className="peer sr-only"
+                                    />
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
+                                      currentValue === value
+                                        ? 'bg-primary border-primary' 
+                                        : 'border-gray-300 hover:border-primary/50'
+                                    } ${editLoading ? 'opacity-50' : ''}`}>
+                                      {currentValue === value && (
+                                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <label htmlFor={`${f}-${value}`} className="text-sm font-medium cursor-pointer flex-1">
+                                    {value}
+                                  </label>
+                                  {currentValue === value && (
+                                    <Check className="h-4 w-4 text-primary" />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        } else {
+                          // Multi select implementation (existing)
                           const currentValues = Array.isArray(editForm[f]) 
                             ? editForm[f] 
                             : (editForm[f] ? editForm[f].split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0) : []);
-                          const isChecked = currentValues.includes(value);
                           return (
-                            <div key={value} className={`flex items-center space-x-3 p-4 rounded-lg border transition-all duration-200 cursor-pointer ${
-                              isChecked 
-                                ? 'border-primary bg-primary/5 text-primary' 
-                                : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                            }`}>
-                              <div className="relative">
-                                <input
-                                  type="checkbox"
-                                  id={`${f}-${value}`}
-                                  checked={isChecked}
-                                  onChange={(e) => {
-                                    const currentValues = Array.isArray(editForm[f]) 
-                                      ? editForm[f] 
-                                      : (editForm[f] ? editForm[f].split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0) : []);
-                                    const newValues = e.target.checked
-                                      ? [...currentValues, value]
-                                      : currentValues.filter((v: string) => v !== value);
-                                    handleEditFormChange(f, newValues);
-                                  }}
-                                  disabled={editLoading}
-                                  className="peer sr-only"
-                                />
-                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
-                                  isChecked 
-                                    ? 'bg-primary border-primary' 
-                                    : 'border-gray-300 hover:border-primary/50'
-                                } ${editLoading ? 'opacity-50' : ''}`}>
-                                  {isChecked && (
-                                    <Check className="h-3 w-3 text-white" />
-                                  )}
-                                </div>
-                              </div>
-                              <label htmlFor={`${f}-${value}`} className="text-sm font-medium cursor-pointer flex-1">
-                                {value}
-                              </label>
-                              {isChecked && (
-                                <Check className="h-4 w-4 text-primary" />
-                              )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {options.map((value: string) => {
+                                const isChecked = currentValues.includes(value);
+                                return (
+                                  <div key={value} className={`flex items-center space-x-3 p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
+                                    isChecked 
+                                      ? 'border-primary bg-primary/5 text-primary' 
+                                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                                  }`}>
+                                    <div className="relative">
+                                      <input
+                                        type="checkbox"
+                                        id={`${f}-${value}`}
+                                        checked={isChecked}
+                                        onChange={(e) => {
+                                          const currentValues = Array.isArray(editForm[f]) 
+                                            ? editForm[f] 
+                                            : (editForm[f] ? editForm[f].split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0) : []);
+                                          const newValues = e.target.checked
+                                            ? [...currentValues, value]
+                                            : currentValues.filter((v: string) => v !== value);
+                                          handleEditFormChange(f, newValues);
+                                        }}
+                                        disabled={editLoading}
+                                        className="peer sr-only"
+                                      />
+                                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
+                                        isChecked 
+                                          ? 'bg-primary border-primary' 
+                                          : 'border-gray-300 hover:border-primary/50'
+                                      } ${editLoading ? 'opacity-50' : ''}`}>
+                                        {isChecked && (
+                                          <Check className="h-3 w-3 text-white" />
+                                        )}
+                                      </div>
+                                    </div>
+                                    <label htmlFor={`${f}-${value}`} className="text-sm font-medium cursor-pointer flex-1">
+                                      {value}
+                                    </label>
+                                    {isChecked && (
+                                      <Check className="h-4 w-4 text-primary" />
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           );
-                        })}
-                      </div>
-                      {editForm[f] && Array.isArray(editForm[f]) && editForm[f].length > 0 && (
-                        <div className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg flex items-center gap-2">
-                          <Check className="h-3 w-3" />
-                          Selected: {editForm[f].length} option{editForm[f].length !== 1 ? 's' : ''}
-                        </div>
-                      )}
+                        }
+                      })()}
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    f.toLowerCase().includes('date') ? (
+                      <Input
+                        id={`edit-${f}`}
+                        type="date"
+                        value={editForm[f] ?? ''}
+                        onChange={e => handleEditFormChange(f, e.target.value)}
+                        disabled={editLoading}
+                        className="h-11 text-base"
+                        placeholder="YYYY-MM-DD"
+                      />
+                    ) : (
                       <Input
                         id={`edit-${f}`}
                         value={editForm[f] ?? ''}
@@ -563,29 +651,37 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                         className="h-11 text-base"
                         placeholder={`Enter ${f.charAt(0).toLowerCase() + f.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase()}`}
                       />
-                      {editForm[f] && typeof editForm[f] === 'string' && editForm[f].length > 0 && (
-                        <div className="text-xs text-muted-foreground">
-                          Character count: {editForm[f].length}
-                        </div>
-                      )}
-                    </div>
+                    )
                   )}
                 </div>
               ))}
+              </div>
+              
+              {editError && (
+                <div className="px-8 mt-6">
+                  <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <div className="w-8 h-8 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center">
+                          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
+                          Update Failed
+                        </h4>
+                        <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">
+                          {editError}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
-            {editError && (
-              <Alert variant="destructive" appearance="light" className="mb-4">
-                <AlertIcon />
-                <AlertTitle className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  {editError}
-                </AlertTitle>
-              </Alert>
-            )}
-            
             {/* Enhanced Footer for Save/Cancel */}
-            <div className="pt-6 border-t border-border bg-gradient-to-r from-background to-muted/30 rounded-lg p-4">
+            <div className="border-t border-border bg-white dark:bg-slate-900 px-8 py-6 mt-0">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div className="text-xs text-muted-foreground">
                   {editRow && (

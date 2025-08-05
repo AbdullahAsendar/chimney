@@ -33,11 +33,11 @@
 
 .dark {
   /** Base Colors **/
-  --background: oklch(14.1% 0.005 285.823); /* --color-zinc-950 */
+  --background: #020617; /* --color-slate-950 */
   --foreground: oklch(98.5% 0 0); /* --color-zinc-50 */
-  --card: oklch(14.1% 0.005 285.823); /* --color-zinc-950 */
+  --card: #0f172a; /* --color-slate-900 */
   --card-foreground: oklch(98.5% 0 0); /* --color-zinc-50 */
-  --popover: oklch(14.1% 0.005 285.823); /* --color-zinc-950 */
+  --popover: #0f172a; /* --color-slate-900 */
   --popover-foreground: oklch(98.5% 0 0); /* --color-zinc-50 */
   --primary: #005834; /* custom color - logo green */
   --primary-foreground: oklch(1 0 0); /* --color-white */

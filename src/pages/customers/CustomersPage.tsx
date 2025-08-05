@@ -11,7 +11,7 @@ const CustomersPage = () => (
   editAllAttributes={true}
   updateableFields={['name', 'nameAr', 'phone', 'email', 'birthdate', 'emiratesId', 'idCardExpiryDate', 'passportNumber' , 'passportExpiryDate' ,'tradeLicense', 'evaluationNumber', 'licenseExpiryDate',  'businessFlags']}
   predefinedFields={{
-    businessFlags: ['SOP1','SOP2','SOP3','FEES_EXEMPT','VIP','EVALUATION_COMPANY','EARLY_ACCESS','HIDDEN_SERVICES','DUPLICATE_CONSENTED','ICP',]
+    businessFlags: { type: 'multi', options: ['SOP1','SOP2','SOP3','FEES_EXEMPT','VIP','EVALUATION_COMPANY','EARLY_ACCESS','HIDDEN_SERVICES','DUPLICATE_CONSENTED','ICP'] }
   }}
 />
 );
