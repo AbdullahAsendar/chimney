@@ -19,15 +19,15 @@ export function DashboardPage() {
           <ToolbarHeading>
             <ToolbarPageTitle />
             <ToolbarDescription>
-              Sales, inventory, and activity overview
+              Customer management, applications, and worker tasks overview
             </ToolbarDescription>
           </ToolbarHeading>
           <ToolbarActions>
             <Button variant="outline">
-              <Link to="#">Reports</Link>
+              <Link to="/customers">View Customers</Link>
             </Button>
             <Button>
-              <Link to="#">New Product</Link>
+              <Link to="/applications">View Applications</Link>
             </Button>
           </ToolbarActions>
         </Toolbar>

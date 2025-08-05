@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useEnvironment } from '@/providers/environment-provider';
 import axios from 'axios';
 import { LoaderCircleIcon, Power, CheckCircle2, XCircle } from 'lucide-react';
+import * as authHelper from '@/auth/lib/helpers';
 
 export default function ToolsPage() {
   const { apiBaseUrl } = useEnvironment();
@@ -154,10 +155,16 @@ export default function ToolsPage() {
     setContractError(null);
     setContractSuccess(null);
     try {
+      const auth = authHelper.getAuth();
+      const accessToken = auth?.access_token;
+      const accountId = localStorage.getItem('chimney-user-id');
+      
       const res = await axios.get(
         `${apiBaseUrl}/workflow-service/api/v1/application/${applicationId}/document/regenerate?documentType=CONTRACT`,
         {
           headers: {
+            ...(accessToken ? { 'sdd-token': accessToken } : {}),
+            ...(accountId ? { 'account-id': accountId } : {}),
             'accept': '*/*',
           },
         }
