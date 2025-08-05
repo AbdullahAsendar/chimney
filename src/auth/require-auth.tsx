@@ -9,53 +9,42 @@ import { AuthAdapter } from '@/auth/adapters/supabase-adapter';
  * If user is not authenticated, redirects to the login page.
  */
 export const RequireAuth = () => {
-  const { auth, verify, loading: globalLoading } = useAuth();
+  const { auth, loading: globalLoading, isInitialized } = useAuth();
   const location = useLocation();
-  const [loading, setLoading] = useState(true);
-  const verificationStarted = useRef(false);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (!auth?.access_token || !verificationStarted.current) {
-        verificationStarted.current = true;
-        try {
-          await verify();
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        setLoading(false);
-      }
-    };
+  console.log('RequireAuth: Checking authentication state', {
+    hasAuth: !!auth,
+    hasAccessToken: !!auth?.access_token,
+    loading: globalLoading,
+    isInitialized,
+    currentPath: location.pathname
+  });
 
-    checkAuth();
-  }, [auth, verify]);
-
-  // Show screen loader while checking authentication
-  if (loading || globalLoading) {
+  // Show screen loader while authentication is initializing
+  if (globalLoading || !isInitialized) {
+    console.log('RequireAuth: Showing loader while authentication initializes');
     return <ScreenLoader />;
   }
 
-  // If no refresh token, redirect to classic login
-  if (!AuthAdapter.getCachedRefreshToken()) {
-    return (
-      <Navigate
-        to={`/auth/signin?next=${encodeURIComponent(location.pathname)}`}
-        replace
-      />
-    );
+  // If authenticated (has access token), render child routes
+  if (auth?.access_token) {
+    console.log('RequireAuth: User authenticated, rendering protected routes');
+    
+    // If we're on the signin page but authenticated, redirect to home
+    if (location.pathname.includes('/auth/signin')) {
+      console.log('RequireAuth: User authenticated but on signin page, redirecting to home');
+      return <Navigate to="/" replace />;
+    }
+    
+    return <Outlet />;
   }
 
   // If not authenticated, redirect to classic login
-  if (!auth?.access_token) {
-    return (
-      <Navigate
-        to={`/auth/signin?next=${encodeURIComponent(location.pathname)}`}
-        replace
-      />
-    );
-  }
-
-  // If authenticated, render child routes
-  return <Outlet />;
+  console.log('RequireAuth: User not authenticated, redirecting to login');
+  return (
+    <Navigate
+      to={`/auth/signin?next=${encodeURIComponent(location.pathname)}`}
+      replace
+    />
+  );
 };

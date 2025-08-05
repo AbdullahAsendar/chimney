@@ -28,6 +28,7 @@ export const AuthContext = createContext<{
   logout: () => void;
   verify: () => Promise<void>;
   isAdmin: boolean;
+  isInitialized: boolean;
 }>({
   loading: false,
   setLoading: () => {},
@@ -43,6 +44,7 @@ export const AuthContext = createContext<{
   logout: () => {},
   verify: async () => {},
   isAdmin: false,
+  isInitialized: false,
 });
 
 // Hook definition

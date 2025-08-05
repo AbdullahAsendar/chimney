@@ -974,33 +974,68 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
 
       {/* Create Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader className="bg-white dark:bg-slate-900 px-8 py-6 border-b border-border">
-            <DialogTitle className="text-xl font-semibold text-foreground">
-              Create New {entity.charAt(0).toUpperCase() + entity.slice(1)}
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              Fill in the details to create a new {entity.charAt(0).toLowerCase() + entity.slice(1)}.
-            </DialogDescription>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden">
+          <DialogHeader className="pb-0 pt-8 px-8 bg-white dark:bg-slate-900">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Plus className="h-6 w-6 text-primary" />
+                  </div>
+                  Create {entity.charAt(0).toUpperCase() + entity.slice(1)}
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground mt-2">
+                  Fill in the details below to create a new {entity.charAt(0).toLowerCase() + entity.slice(1)}. All fields marked with an asterisk (*) are required.
+                </DialogDescription>
+              </div>
+              <div className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                New
+              </div>
+            </div>
           </DialogHeader>
-
+          
+          {/* Sticky error message */}
           {createError && (
             <div className="sticky top-0 z-10 px-8 py-4 bg-white/95 backdrop-blur-sm dark:bg-slate-900/95 border-b border-border">
-              <Alert variant="destructive" appearance="light" onClose={() => setCreateError(null)}>
-                <AlertIcon />
-                <AlertTitle>{createError}</AlertTitle>
-              </Alert>
+              <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center">
+                      <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
+                      Creation Failed
+                    </h4>
+                    <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">
+                      {createError}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
-
-          <form onSubmit={handleCreateSubmit} className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto px-8 py-6 bg-gray-50 dark:bg-gray-900/50">
+          
+          <form onSubmit={handleCreateSubmit}>
+            <div className="max-h-[65vh] overflow-y-auto px-8 py-8 bg-gray-50 dark:bg-slate-800/50">
               <div className="space-y-6">
                 {fields.filter(f => f.toLowerCase() !== 'id').map(f => (
-                  <div key={f} className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground" htmlFor={`create-${f}`}>
-                      {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
-                    </label>
+                  <div key={f} className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-semibold text-foreground" htmlFor={`create-${f}`}>
+                        {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
+                      </label>
+                      {(f.toLowerCase().includes('json') || f.toLowerCase().includes('data') || f.toLowerCase().includes('config') || f.toLowerCase().includes('metadata') || f.toLowerCase().includes('settings')) && (
+                        <span className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-3 py-1 rounded-full font-medium">
+                          {f.toLowerCase().includes('json') ? 'JSON' : 
+                           f.toLowerCase().includes('data') ? 'Data' :
+                           f.toLowerCase().includes('config') ? 'Config' :
+                           f.toLowerCase().includes('metadata') ? 'Metadata' :
+                           f.toLowerCase().includes('settings') ? 'Settings' : 'Object'}
+                        </span>
+                      )}
+                    </div>
                     
                     {predefinedFields[f] ? (
                       (() => {
@@ -1010,46 +1045,98 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                         const isSingleSelect = !isMultiSelect && (fieldConfig as any).type === 'single';
                         
                         if (isSingleSelect) {
+                          // Single select implementation (matching edit modal)
+                          const currentValue = createForm[f];
                           return (
                             <div className="space-y-2">
-                              {options.map((option: string) => (
-                                <label key={option} className="flex items-center space-x-2 cursor-pointer">
-                                  <input
-                                    type="radio"
-                                    name={`create-${f}`}
-                                    value={option}
-                                    checked={createForm[f] === option}
-                                    onChange={(e) => handleCreateFormChange(f, e.target.value)}
-                                    disabled={createLoading}
-                                    className="text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className="text-sm text-foreground">{option}</span>
-                                </label>
+                              {options.map((value: string) => (
+                                <div key={value} className={`flex items-center space-x-3 p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
+                                  currentValue === value 
+                                    ? 'border-primary bg-primary/5 text-primary' 
+                                    : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                                }`}>
+                                  <div className="relative">
+                                    <input
+                                      type="radio"
+                                      id={`create-${f}-${value}`}
+                                      name={`create-${f}`}
+                                      value={value}
+                                      checked={currentValue === value}
+                                      onChange={(e) => handleCreateFormChange(f, e.target.value)}
+                                      disabled={createLoading}
+                                      className="peer sr-only"
+                                    />
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
+                                      currentValue === value 
+                                        ? 'bg-primary border-primary' 
+                                        : 'border-gray-300 hover:border-primary/50'
+                                    } ${createLoading ? 'opacity-50' : ''}`}>
+                                      {currentValue === value && (
+                                        <div className="w-2 h-2 bg-white rounded-full" />
+                                      )}
+                                    </div>
+                                  </div>
+                                  <label htmlFor={`create-${f}-${value}`} className="text-sm font-medium cursor-pointer flex-1">
+                                    {value}
+                                  </label>
+                                  {currentValue === value && (
+                                    <Check className="h-4 w-4 text-primary" />
+                                  )}
+                                </div>
                               ))}
                             </div>
                           );
                         } else {
+                          // Multi select implementation (matching edit modal)
+                          const currentValues = Array.isArray(createForm[f]) 
+                            ? createForm[f] 
+                            : (createForm[f] ? createForm[f].split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0) : []);
                           return (
-                            <div className="space-y-2">
-                              {options.map((option: string) => (
-                                <label key={option} className="flex items-center space-x-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={Array.isArray(createForm[f]) ? createForm[f].includes(option) : false}
-                                    onChange={(e) => {
-                                      const currentValues = Array.isArray(createForm[f]) ? createForm[f] : [];
-                                      if (e.target.checked) {
-                                        handleCreateFormChange(f, [...currentValues, option]);
-                                      } else {
-                                        handleCreateFormChange(f, currentValues.filter((v: string) => v !== option));
-                                      }
-                                    }}
-                                    disabled={createLoading}
-                                    className="text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className="text-sm text-foreground">{option}</span>
-                                </label>
-                              ))}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {options.map((value: string) => {
+                                const isChecked = currentValues.includes(value);
+                                return (
+                                  <div key={value} className={`flex items-center space-x-3 p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
+                                    isChecked 
+                                      ? 'border-primary bg-primary/5 text-primary' 
+                                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                                  }`}>
+                                    <div className="relative">
+                                      <input
+                                        type="checkbox"
+                                        id={`create-${f}-${value}`}
+                                        checked={isChecked}
+                                        onChange={(e) => {
+                                          const currentValues = Array.isArray(createForm[f]) 
+                                            ? createForm[f] 
+                                            : (createForm[f] ? createForm[f].split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0) : []);
+                                          const newValues = e.target.checked
+                                            ? [...currentValues, value]
+                                            : currentValues.filter((v: string) => v !== value);
+                                          handleCreateFormChange(f, newValues);
+                                        }}
+                                        disabled={createLoading}
+                                        className="peer sr-only"
+                                      />
+                                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
+                                        isChecked 
+                                          ? 'bg-primary border-primary' 
+                                          : 'border-gray-300 hover:border-primary/50'
+                                      } ${createLoading ? 'opacity-50' : ''}`}>
+                                        {isChecked && (
+                                          <Check className="h-3 w-3 text-white" />
+                                        )}
+                                      </div>
+                                    </div>
+                                    <label htmlFor={`create-${f}-${value}`} className="text-sm font-medium cursor-pointer flex-1">
+                                      {value}
+                                    </label>
+                                    {isChecked && (
+                                      <Check className="h-4 w-4 text-primary" />
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           );
                         }
@@ -1065,18 +1152,6 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                       />
                     ) : (f.toLowerCase().includes('json') || f.toLowerCase().includes('data') || f.toLowerCase().includes('config') || f.toLowerCase().includes('metadata') || f.toLowerCase().includes('settings')) ? (
                       <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-semibold text-foreground" htmlFor={`create-${f}`}>
-                            {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
-                          </label>
-                          <span className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-3 py-1 rounded-full font-medium">
-                            {f.toLowerCase().includes('json') ? 'JSON' : 
-                             f.toLowerCase().includes('data') ? 'Data' :
-                             f.toLowerCase().includes('config') ? 'Config' :
-                             f.toLowerCase().includes('metadata') ? 'Metadata' :
-                             f.toLowerCase().includes('settings') ? 'Settings' : 'Object'}
-                          </span>
-                        </div>
                         <div className="relative group">
                           <textarea
                             id={`create-${f}`}
@@ -1180,7 +1255,7 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
               </div>
             </div>
             
-            {/* Enhanced Footer for Create/Cancel */}
+            {/* Enhanced Footer for Save/Cancel */}
             <div className="border-t border-border bg-white dark:bg-slate-900 px-8 py-6 mt-0">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div className="text-xs text-muted-foreground">

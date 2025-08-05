@@ -47,132 +47,88 @@ function clearUserCache(): void {
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
-  const [auth, setAuth] = useState<AuthModel | undefined>(authHelper.getAuth());
+  const [auth, setAuth] = useState<AuthModel | undefined>();
   const [currentUser, setCurrentUser] = useState<UserModel | undefined>();
   const [isAdmin, setIsAdmin] = useState(false);
-  const fetchingUser = useRef(false);
-  const lastUseEffectCall = useRef(0);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const isInitializing = useRef(false);
 
   useEffect(() => {
     setIsAdmin(currentUser?.is_admin === true);
   }, [currentUser]);
 
-  const fetchUserProfile = async (accessToken: string): Promise<UserModel | null> => {
-    if (fetchingUser.current) {
-      // Already fetching, wait for it to complete
-      return new Promise((resolve) => {
-        const checkComplete = () => {
-          if (!fetchingUser.current) {
-            resolve(currentUser || null);
-          } else {
-            setTimeout(checkComplete, 100);
-          }
-        };
-        checkComplete();
-      });
-    }
-
-    fetchingUser.current = true;
-    
-    try {
-      // Check cache first
-      const cachedUser = getUserFromCache();
-      if (cachedUser) {
-        setCurrentUser(cachedUser);
-        fetchingUser.current = false;
-        return cachedUser;
-      }
-
-      // Fetch from API
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://stg-api-aqari.ds.sharjah.ae';
-      const superResponse = await axios.get(
-        `${API_BASE_URL}/authentication-service/api/v1/auth/account/admin/super`,
-        { headers: { accept: '*/*', 'sdd-token': accessToken } }
-      );
+  // Initialize authentication on app load
+  useEffect(() => {
+    const initializeAuth = async () => {
+      if (isInitializing.current) return;
+      isInitializing.current = true;
       
-      const user = superResponse.data?.result;
-      if (user) {
-        setCurrentUser(user);
-        setUserCache(user);
-        return user;
-      }
+      console.log('AuthProvider: Initializing authentication...');
       
-      return null;
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-      return null;
-    } finally {
-      fetchingUser.current = false;
-    }
-  };
-
-  const verify = async () => {
-    try {
-      // Check if we have cached auth data
-      const cachedAuth = authHelper.getAuth();
-      if (cachedAuth?.access_token) {
-        setAuth(cachedAuth);
-        // Try to fetch user profile to verify token is still valid
-        const user = await fetchUserProfile(cachedAuth.access_token);
-        if (!user) {
-          // Token might be expired, try to refresh using refresh token
-          const refreshToken = AuthAdapter.getCachedRefreshToken();
-          if (refreshToken) {
-            try {
-              const { auth: newAuth, user: newUser } = await AuthAdapter.loginWithRefreshToken(refreshToken);
-              saveAuth(newAuth);
-              setCurrentUser(newUser);
-              setUserCache(newUser);
-              return; // Successfully refreshed, exit early
-            } catch (refreshError) {
-              // Refresh failed, clear everything
-              console.error('Failed to refresh token:', refreshError);
-              AuthAdapter.logout();
-              authHelper.removeAuth();
-              setAuth(undefined);
-              setCurrentUser(undefined);
-              clearUserCache();
-            }
-          } else {
-            // No refresh token, clear auth
-            authHelper.removeAuth();
-            setAuth(undefined);
-            setCurrentUser(undefined);
-            clearUserCache();
-          }
-        }
-      } else {
-        // No cached auth, try to use refresh token
+      try {
+        // Always try to use refresh token on app load
         const refreshToken = AuthAdapter.getCachedRefreshToken();
+        
         if (refreshToken) {
+          console.log('AuthProvider: Found refresh token, attempting to authenticate...');
+          
           try {
+            // Use refresh token to get fresh auth token and user data
             const { auth: newAuth, user: newUser } = await AuthAdapter.loginWithRefreshToken(refreshToken);
+            
+            console.log('AuthProvider: Successfully authenticated with refresh token');
+            
+            // Set auth and user data
             saveAuth(newAuth);
             setCurrentUser(newUser);
             setUserCache(newUser);
-            return; // Successfully authenticated, exit early
+            
+            // Small delay to ensure state is properly set
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
           } catch (refreshError) {
-            // Refresh failed, clear everything
-            console.error('Failed to refresh token:', refreshError);
+            console.error('AuthProvider: Failed to authenticate with refresh token:', refreshError);
+            
+            // Clear everything on refresh failure
             AuthAdapter.logout();
             authHelper.removeAuth();
             setAuth(undefined);
             setCurrentUser(undefined);
             clearUserCache();
           }
+        } else {
+          console.log('AuthProvider: No refresh token found, user needs to login');
+          
+          // No refresh token, clear any cached data
+          AuthAdapter.logout();
+          authHelper.removeAuth();
+          setAuth(undefined);
+          setCurrentUser(undefined);
+          clearUserCache();
         }
+      } catch (error) {
+        console.error('AuthProvider: Authentication initialization error:', error);
+        
+        // Clear everything on any error
+        AuthAdapter.logout();
+        authHelper.removeAuth();
+        setAuth(undefined);
+        setCurrentUser(undefined);
+        clearUserCache();
+      } finally {
+        setLoading(false);
+        setIsInitialized(true);
+        isInitializing.current = false;
       }
-    } catch (error) {
-      // Clear auth on any error
-      console.error('Auth verification error:', error);
-      AuthAdapter.logout();
-      authHelper.removeAuth();
-      setAuth(undefined);
-      setCurrentUser(undefined);
-      clearUserCache();
-    } finally {
-      setLoading(false);
-    }
+    };
+
+    initializeAuth();
+  }, []); // Only run once on mount
+
+  const verify = async () => {
+    console.log('AuthProvider: verify() called - this should not be used in new flow');
+    // This function is kept for compatibility but should not be used
+    // The new flow always uses refresh token on app load
   };
 
   const saveAuth = (auth: AuthModel | undefined) => {
@@ -199,47 +155,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   };
 
-  // On mount, if authenticated, fetch user profile from /super
-  useEffect(() => {
-    // Prevent multiple simultaneous calls
-    if (fetchingUser.current) {
-      console.log('AuthProvider: Skipping useEffect - already fetching user');
-      return;
-    }
 
-    // Add cooldown to prevent rapid successive calls
-    const now = Date.now();
-    if (now - lastUseEffectCall.current < 1000) { // 1 second cooldown
-      console.log('AuthProvider: Skipping useEffect - cooldown active');
-      return;
-    }
-    lastUseEffectCall.current = now;
-
-    const fetchUser = async () => {
-      console.log('AuthProvider: useEffect triggered', { 
-        hasToken: !!auth?.access_token, 
-        hasUser: !!currentUser,
-        loading 
-      });
-      
-      if (auth?.access_token && !currentUser && !loading) {
-        console.log('AuthProvider: Fetching user profile...');
-        await fetchUserProfile(auth.access_token);
-      } else if (!auth?.access_token) {
-        console.log('AuthProvider: No token, clearing user');
-        setCurrentUser(undefined);
-        clearUserCache();
-      } else {
-        console.log('AuthProvider: Skipping fetch', { 
-          hasToken: !!auth?.access_token, 
-          hasUser: !!currentUser, 
-          loading 
-        });
-      }
-    };
-    fetchUser();
-    // Only run when auth token or currentUser changes, not on every auth object change
-  }, [auth?.access_token, currentUser, loading]);
 
   const logout = () => {
     AuthAdapter.logout();
@@ -268,6 +184,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         logout,
         verify,
         isAdmin,
+        isInitialized,
       }}
     >
       {children}
