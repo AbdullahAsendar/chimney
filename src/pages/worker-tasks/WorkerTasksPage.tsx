@@ -22,7 +22,15 @@ const WorkerTasksPage = () => (
     status: { 
       type: 'single', 
       options: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED'] 
+    },
+    type: {
+      type: 'single',
+      options: ['APPLICATION_ACTION', 'DOWNLOAD_RECEIPT', 'PAYMENT_STATUS', 'SEWA_MOVE_IN_UPLOAD']
     }
+  }}
+  createDefaults={{
+    trialCount: 0,
+    nextRun: new Date().toISOString().split('T')[0] // Today's date in YYYY-MM-DD format
   }}
   />
 );

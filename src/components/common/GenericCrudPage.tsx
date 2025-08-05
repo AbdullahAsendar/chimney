@@ -66,6 +66,7 @@ interface GenericCrudPageProps {
   editAllAttributes?: boolean;
   predefinedFields?: Record<string, string[] | { type: 'single' | 'multi'; options: string[] }>; // fieldName -> array of possible values or object with type and options
   updateableFields?: string[]; // fields that can be updated, if not provided all fields are updateable
+  createDefaults?: Record<string, any>; // default values for create form
 }
 
 const PAGE_SIZE = 10;
@@ -80,6 +81,7 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
   editAllAttributes = false,
   predefinedFields = {},
   updateableFields,
+  createDefaults = {},
 }) => {
   const { apiBaseUrl } = useEnvironment();
   const [rows, setRows] = useState<any[]>([]);
@@ -513,7 +515,7 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
         {enableCreate && (
           <Button 
             onClick={() => {
-              setCreateForm({});
+              setCreateForm(createDefaults);
               setCreateError(null);
               setShowCreateDialog(true);
             }}
@@ -836,7 +838,6 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                             }}
                             disabled={editLoading}
                             className="w-full min-h-[220px] p-5 text-sm font-mono bg-background border border-border rounded-xl resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                            placeholder={`Enter valid JSON for ${f.charAt(0).toLowerCase() + f.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase()}`}
                           />
                           
                           {/* JSON validation indicator */}
@@ -1082,8 +1083,7 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                             value={createForm[f] ?? ''}
                             onChange={e => handleCreateFormChange(f, e.target.value)}
                             disabled={createLoading}
-                            className="w-full min-h-[220px] p-5 text-sm font-mono bg-background border border-border rounded-xl resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                            placeholder={`Enter valid JSON for ${f.charAt(0).toLowerCase() + f.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase()}`}
+                            className="w-full min-h-[220px] p-4 text-sm font-mono bg-background border border-border rounded-xl resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 shadow-sm hover:shadow-md"
                           />
                           {createForm[f] && (
                             <div className="absolute top-4 right-4">

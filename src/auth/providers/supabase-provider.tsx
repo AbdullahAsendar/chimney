@@ -51,6 +51,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [currentUser, setCurrentUser] = useState<UserModel | undefined>();
   const [isAdmin, setIsAdmin] = useState(false);
   const fetchingUser = useRef(false);
+  const lastUseEffectCall = useRef(0);
 
   useEffect(() => {
     setIsAdmin(currentUser?.is_admin === true);
@@ -200,17 +201,45 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   // On mount, if authenticated, fetch user profile from /super
   useEffect(() => {
+    // Prevent multiple simultaneous calls
+    if (fetchingUser.current) {
+      console.log('AuthProvider: Skipping useEffect - already fetching user');
+      return;
+    }
+
+    // Add cooldown to prevent rapid successive calls
+    const now = Date.now();
+    if (now - lastUseEffectCall.current < 1000) { // 1 second cooldown
+      console.log('AuthProvider: Skipping useEffect - cooldown active');
+      return;
+    }
+    lastUseEffectCall.current = now;
+
     const fetchUser = async () => {
-      if (auth?.access_token && !currentUser) {
+      console.log('AuthProvider: useEffect triggered', { 
+        hasToken: !!auth?.access_token, 
+        hasUser: !!currentUser,
+        loading 
+      });
+      
+      if (auth?.access_token && !currentUser && !loading) {
+        console.log('AuthProvider: Fetching user profile...');
         await fetchUserProfile(auth.access_token);
       } else if (!auth?.access_token) {
+        console.log('AuthProvider: No token, clearing user');
         setCurrentUser(undefined);
         clearUserCache();
+      } else {
+        console.log('AuthProvider: Skipping fetch', { 
+          hasToken: !!auth?.access_token, 
+          hasUser: !!currentUser, 
+          loading 
+        });
       }
     };
     fetchUser();
-    // Only run when auth changes
-  }, [auth]);
+    // Only run when auth token or currentUser changes, not on every auth object change
+  }, [auth?.access_token, currentUser, loading]);
 
   const logout = () => {
     AuthAdapter.logout();
