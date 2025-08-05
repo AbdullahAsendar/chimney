@@ -9,7 +9,7 @@ import {
   SortingState,
   useReactTable,
 } from '@tanstack/react-table';
-import { Search, X, Settings2, Pencil, Trash2 } from 'lucide-react';
+import { Search, X, Settings2, Pencil, Trash2, Check, Save, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -64,6 +64,8 @@ interface GenericCrudPageProps {
   enableEdit?: boolean;
   enableDelete?: boolean;
   editAllAttributes?: boolean;
+  predefinedFields?: Record<string, string[]>; // fieldName -> array of possible values
+  updateableFields?: string[]; // fields that can be updated, if not provided all fields are updateable
 }
 
 const PAGE_SIZE = 10;
@@ -76,6 +78,8 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
   enableEdit = true,
   enableDelete = true,
   editAllAttributes = false,
+  predefinedFields = {},
+  updateableFields,
 }) => {
   const { apiBaseUrl } = useEnvironment();
   const [rows, setRows] = useState<any[]>([]);
@@ -185,10 +189,26 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       const systemFields = ['id', 'createTimestamp', 'updateTimestamp', 'createdByAccountId', 'updatedByAccountId', 'source', 'error', 'jobId'];
       editFields = Object.keys(row).filter(f => !systemFields.includes(f));
     }
+    
+    // Filter to only include updateable fields if specified, maintaining the order
+    if (updateableFields) {
+      editFields = updateableFields.filter(f => editFields.includes(f));
+    }
+    
     setEditRow(row);
-    setEditForm(editFields.reduce((acc, f) => ({ ...acc, [f]: row[f] ?? '' }), {}));
+    const initialForm = editFields.reduce((acc, f) => {
+      let value = row[f] ?? '';
+      // Convert predefined fields to array if they're strings
+      if (predefinedFields[f] && typeof value === 'string' && value) {
+        value = value.split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0);
+      }
+      return { ...acc, [f]: value };
+    }, {});
+    setEditForm(initialForm);
     setEditError(null);
   };
+
+
   const handleEditFormChange = (field: string, value: any) => {
     setEditForm((prev: any) => ({ ...prev, [field]: value }));
   };
@@ -204,9 +224,26 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       const url = `${apiBaseUrl}/${service}/api/v1/chimney/${entity}/${editRow.id}`;
       // Remove id and system fields from attributes, and ignore empty values
       const { id, createTimestamp, updateTimestamp, createdByAccountId, updatedByAccountId, source, error, jobId, customerType, ...attributes } = editForm;
-      const filteredAttributes = Object.fromEntries(
+      let filteredAttributes = Object.fromEntries(
         Object.entries(attributes).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
       );
+      
+      // Only include updateable fields if specified
+      if (updateableFields) {
+        filteredAttributes = Object.fromEntries(
+          Object.entries(filteredAttributes).filter(([key, _]) => updateableFields.includes(key))
+        );
+      }
+      
+      // Convert predefined fields from string to array if they exist
+      Object.keys(filteredAttributes).forEach(field => {
+        if (predefinedFields[field] && typeof filteredAttributes[field] === 'string') {
+          filteredAttributes[field] = filteredAttributes[field]
+            .split(',')
+            .map((value: string) => value.trim())
+            .filter((value: string) => value.length > 0);
+        }
+      });
       const payload = {
         data: {
           type: entity,
@@ -401,36 +438,181 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       </AlertDialog>
       {/* Edit dialog */}
       <Dialog open={!!editRow} onOpenChange={v => { if (!v) setEditRow(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit {entity.charAt(0).toUpperCase() + entity.slice(1)}</DialogTitle>
-            <DialogDescription>Update the fields and save changes.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleEditSubmit} className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto overflow-x-hidden">
-            {(editAllAttributes && editRow
-              ? Object.keys(editRow).filter(f => !['id', 'createTimestamp', 'updateTimestamp', 'createdByAccountId', 'updatedByAccountId', 'source', 'error', 'jobId'].includes(f))
-              : fields.filter(f => f !== 'id')
-            ).map((f) => (
-              <div key={f} className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor={`edit-${f}`}>{f.charAt(0).toUpperCase() + f.slice(1)}</label>
-                <Input
-                  id={`edit-${f}`}
-                  value={editForm[f] ?? ''}
-                  onChange={e => handleEditFormChange(f, e.target.value)}
-                  disabled={editLoading}
-                />
+        <DialogContent className="max-w-3xl">
+          <DialogHeader className="pb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Pencil className="h-6 w-6 text-primary" />
+                  </div>
+                  Edit {entity.charAt(0).toUpperCase() + entity.slice(1)}
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground mt-2">
+                  Update the information below and save your changes. All fields marked with an asterisk (*) are required.
+                </DialogDescription>
               </div>
-            ))}
-            {editError && <Alert variant="destructive" appearance="light"><AlertIcon /> <AlertTitle>{editError}</AlertTitle></Alert>}
-            {/* Sticky footer for Save/Cancel */}
-            <div className="sticky bottom-0 bg-background pt-4 pb-2 px-0 z-10 border-t border-border flex flex-col sm:flex-row sm:justify-end gap-2">
-              <DialogClose asChild>
-                <Button type="button" variant="outline" disabled={editLoading}>Cancel</Button>
-              </DialogClose>
-              <Button type="submit" variant="primary" disabled={editLoading}>
-                {editLoading ? <span className="animate-spin mr-2 w-4 h-4 inline-block border-2 border-current border-t-transparent rounded-full" /> : null}
-                Save
-              </Button>
+              {editRow && (
+                <div className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                  ID: {editRow.id}
+                </div>
+              )}
+            </div>
+          </DialogHeader>
+          
+          <form onSubmit={handleEditSubmit} className="space-y-6">
+            <div className="max-h-[65vh] overflow-y-auto pr-2 space-y-6">
+              {(editAllAttributes && editRow
+                ? Object.keys(editRow).filter(f => !['id', 'createTimestamp', 'updateTimestamp', 'createdByAccountId', 'updatedByAccountId', 'source', 'error', 'jobId'].includes(f))
+                : fields.filter(f => f !== 'id')
+              ).filter(f => !updateableFields || updateableFields.includes(f))
+              .sort((a, b) => {
+                // If updateableFields is provided, sort based on its order
+                if (updateableFields) {
+                  const aIndex = updateableFields.indexOf(a);
+                  const bIndex = updateableFields.indexOf(b);
+                  if (aIndex === -1 && bIndex === -1) return 0;
+                  if (aIndex === -1) return 1;
+                  if (bIndex === -1) return -1;
+                  return aIndex - bIndex;
+                }
+                return 0;
+              }).map((f) => (
+                <div key={f} className="space-y-3 p-4 rounded-lg border border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-foreground flex items-center gap-2" htmlFor={`edit-${f}`}>
+                      {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
+                      <span className="text-xs text-muted-foreground font-normal">({f})</span>
+                    </label>
+                    {editForm[f] && typeof editForm[f] === 'string' && editForm[f].length > 0 && (
+                      <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
+                        <Check className="h-3 w-3" />
+                        Filled
+                      </div>
+                    )}
+                  </div>
+                  {predefinedFields[f] ? (
+                    <div className="space-y-4">
+                      <div className="text-xs text-muted-foreground flex items-center gap-2">
+                        <AlertCircle className="h-3 w-3" />
+                        Select one or more options:
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {predefinedFields[f].map((value: string) => {
+                          const currentValues = Array.isArray(editForm[f]) 
+                            ? editForm[f] 
+                            : (editForm[f] ? editForm[f].split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0) : []);
+                          const isChecked = currentValues.includes(value);
+                          return (
+                            <div key={value} className={`flex items-center space-x-3 p-4 rounded-lg border transition-all duration-200 cursor-pointer ${
+                              isChecked 
+                                ? 'border-primary bg-primary/5 text-primary' 
+                                : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                            }`}>
+                              <div className="relative">
+                                <input
+                                  type="checkbox"
+                                  id={`${f}-${value}`}
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    const currentValues = Array.isArray(editForm[f]) 
+                                      ? editForm[f] 
+                                      : (editForm[f] ? editForm[f].split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0) : []);
+                                    const newValues = e.target.checked
+                                      ? [...currentValues, value]
+                                      : currentValues.filter((v: string) => v !== value);
+                                    handleEditFormChange(f, newValues);
+                                  }}
+                                  disabled={editLoading}
+                                  className="peer sr-only"
+                                />
+                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
+                                  isChecked 
+                                    ? 'bg-primary border-primary' 
+                                    : 'border-gray-300 hover:border-primary/50'
+                                } ${editLoading ? 'opacity-50' : ''}`}>
+                                  {isChecked && (
+                                    <Check className="h-3 w-3 text-white" />
+                                  )}
+                                </div>
+                              </div>
+                              <label htmlFor={`${f}-${value}`} className="text-sm font-medium cursor-pointer flex-1">
+                                {value}
+                              </label>
+                              {isChecked && (
+                                <Check className="h-4 w-4 text-primary" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {editForm[f] && Array.isArray(editForm[f]) && editForm[f].length > 0 && (
+                        <div className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg flex items-center gap-2">
+                          <Check className="h-3 w-3" />
+                          Selected: {editForm[f].length} option{editForm[f].length !== 1 ? 's' : ''}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Input
+                        id={`edit-${f}`}
+                        value={editForm[f] ?? ''}
+                        onChange={e => handleEditFormChange(f, e.target.value)}
+                        disabled={editLoading}
+                        className="h-11 text-base"
+                        placeholder={`Enter ${f.charAt(0).toLowerCase() + f.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase()}`}
+                      />
+                      {editForm[f] && typeof editForm[f] === 'string' && editForm[f].length > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          Character count: {editForm[f].length}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            {editError && (
+              <Alert variant="destructive" appearance="light" className="mb-4">
+                <AlertIcon />
+                <AlertTitle className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  {editError}
+                </AlertTitle>
+              </Alert>
+            )}
+            
+            {/* Enhanced Footer for Save/Cancel */}
+            <div className="pt-6 border-t border-border bg-gradient-to-r from-background to-muted/30 rounded-lg p-4">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                <div className="text-xs text-muted-foreground">
+                  {editRow && (
+                    <span>Editing {entity} • Last updated: {new Date().toLocaleDateString()}</span>
+                  )}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <DialogClose asChild>
+                    <Button type="button" variant="outline" disabled={editLoading} className="flex-1 sm:flex-none">
+                      Cancel
+                    </Button>
+                  </DialogClose>
+                  <Button type="submit" variant="primary" disabled={editLoading} className="flex-1 sm:flex-none shadow-lg hover:shadow-xl transition-shadow">
+                    {editLoading ? (
+                      <>
+                        <span className="animate-spin mr-2 w-4 h-4 inline-block border-2 border-current border-t-transparent rounded-full" />
+                        Saving Changes...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
           </form>
         </DialogContent>

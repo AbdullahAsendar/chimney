@@ -114,15 +114,57 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // Try to fetch user profile to verify token is still valid
         const user = await fetchUserProfile(cachedAuth.access_token);
         if (!user) {
-          // Token might be expired, clear auth
-          authHelper.removeAuth();
-          setAuth(undefined);
-          setCurrentUser(undefined);
-          clearUserCache();
+          // Token might be expired, try to refresh using refresh token
+          const refreshToken = AuthAdapter.getCachedRefreshToken();
+          if (refreshToken) {
+            try {
+              const { auth: newAuth, user: newUser } = await AuthAdapter.loginWithRefreshToken(refreshToken);
+              saveAuth(newAuth);
+              setCurrentUser(newUser);
+              setUserCache(newUser);
+              return; // Successfully refreshed, exit early
+            } catch (refreshError) {
+              // Refresh failed, clear everything
+              console.error('Failed to refresh token:', refreshError);
+              AuthAdapter.logout();
+              authHelper.removeAuth();
+              setAuth(undefined);
+              setCurrentUser(undefined);
+              clearUserCache();
+            }
+          } else {
+            // No refresh token, clear auth
+            authHelper.removeAuth();
+            setAuth(undefined);
+            setCurrentUser(undefined);
+            clearUserCache();
+          }
+        }
+      } else {
+        // No cached auth, try to use refresh token
+        const refreshToken = AuthAdapter.getCachedRefreshToken();
+        if (refreshToken) {
+          try {
+            const { auth: newAuth, user: newUser } = await AuthAdapter.loginWithRefreshToken(refreshToken);
+            saveAuth(newAuth);
+            setCurrentUser(newUser);
+            setUserCache(newUser);
+            return; // Successfully authenticated, exit early
+          } catch (refreshError) {
+            // Refresh failed, clear everything
+            console.error('Failed to refresh token:', refreshError);
+            AuthAdapter.logout();
+            authHelper.removeAuth();
+            setAuth(undefined);
+            setCurrentUser(undefined);
+            clearUserCache();
+          }
         }
       }
     } catch (error) {
       // Clear auth on any error
+      console.error('Auth verification error:', error);
+      AuthAdapter.logout();
       authHelper.removeAuth();
       setAuth(undefined);
       setCurrentUser(undefined);

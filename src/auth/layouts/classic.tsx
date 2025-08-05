@@ -14,7 +14,7 @@ export function ClassicLayout() {
           }
         `}
       </style>
-      <div className="flex flex-col items-center justify-center grow bg-center bg-no-repeat page-bg">
+      <div className="flex flex-col items-center justify-center grow bg-center bg-repeat page-bg">
         <Outlet />
       </div>
     </>
