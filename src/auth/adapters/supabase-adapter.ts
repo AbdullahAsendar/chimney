@@ -7,7 +7,7 @@ function getApiBaseUrl() {
     (typeof window !== 'undefined' && (window as any).USE_PROD_API) ||
     (typeof window !== 'undefined' && localStorage.getItem('useProdApi') === 'true')
   ) {
-    return import.meta.env.VITE_API_BASE_URL_PROD || 'https://api-aqari.ds.sharjah.ae';
+    return import.meta.env.VITE_API_BASE_URL_PROD || 'https://stg-api-aqari.ds.sharjah.ae';
   }
   return import.meta.env.VITE_API_BASE_URL || 'https://stg-api-aqari.ds.sharjah.ae';
 }

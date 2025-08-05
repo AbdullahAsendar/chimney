@@ -26,9 +26,7 @@ export const EnvironmentProvider: React.FC<EnvironmentProviderProps> = ({ childr
     return saved === 'production';
   });
 
-  const apiBaseUrl = isProduction
-    ? 'https://api-aqari.ds.sharjah.ae'
-    : import.meta.env.VITE_API_BASE_URL || 'https://api-aqari-stg.ds.sharjah.ae';
+  const apiBaseUrl = 'https://stg-api-aqari.ds.sharjah.ae';
 
   const toggleEnvironment = () => {
     setIsProduction(prev => !prev);
