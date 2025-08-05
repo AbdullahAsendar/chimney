@@ -17,6 +17,13 @@ const WorkerTasksPage = () => (
   enableCreate={true} // Worker tasks are typically created by the system, not manually
   enableEdit={true}   // Allow editing status, trialMax, nextRun
   enableDelete={true} // Allow deleting failed or completed tasks
+  editAllAttributes={true}
+  predefinedFields={{
+    status: { 
+      type: 'single', 
+      options: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED'] 
+    }
+  }}
   />
 );
 

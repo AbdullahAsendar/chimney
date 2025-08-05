@@ -314,6 +314,55 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
             }
           }
           
+          // Enhanced JSON field display
+          if ((f.toLowerCase().includes('json') || f.toLowerCase().includes('data') || f.toLowerCase().includes('config') || f.toLowerCase().includes('metadata') || f.toLowerCase().includes('settings')) && value) {
+            try {
+              const jsonValue = typeof value === 'string' ? JSON.parse(value) : value;
+              return (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 max-w-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                      {f.toLowerCase().includes('json') ? 'JSON' : 
+                       f.toLowerCase().includes('data') ? 'Data' :
+                       f.toLowerCase().includes('config') ? 'Config' :
+                       f.toLowerCase().includes('metadata') ? 'Metadata' :
+                       f.toLowerCase().includes('settings') ? 'Settings' : 'Object'}
+                    </span>
+                    <button
+                      onClick={() => {
+                        const formatted = JSON.stringify(jsonValue, null, 2);
+                        navigator.clipboard.writeText(formatted);
+                      }}
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors text-xs px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                      title="Copy JSON"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="text-xs font-mono text-gray-600 dark:text-gray-300 line-clamp-3">
+                    {JSON.stringify(jsonValue).substring(0, 80)}
+                    {JSON.stringify(jsonValue).length > 80 && '...'}
+                  </div>
+                </div>
+              );
+            } catch (e) {
+              // If JSON parsing fails, show as regular text with warning
+              return (
+                <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 max-w-xs">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                    <span className="text-xs font-medium text-red-700 dark:text-red-300">Invalid JSON</span>
+                  </div>
+                  <div className="text-xs text-red-600 dark:text-red-400 line-clamp-3">
+                    {String(value).substring(0, 80)}
+                    {String(value).length > 80 && '...'}
+                  </div>
+                </div>
+              );
+            }
+          }
+          
           return (
             <div style={{ wordBreak: 'break-word', maxWidth: 320, whiteSpace: 'pre-wrap' }}>
               {typeof displayValue === 'object' ? JSON.stringify(displayValue, null, 2) : String(displayValue)}
@@ -481,7 +530,7 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       {/* Edit dialog */}
       <Dialog open={!!editRow} onOpenChange={v => { if (!v) setEditRow(null); }}>
         <DialogContent className="max-w-3xl p-0 overflow-hidden">
-          <DialogHeader className="pb-1 pt-8 px-8 bg-white dark:bg-slate-900">
+          <DialogHeader className="pb-0 pt-8 px-8 bg-white dark:bg-slate-900">
             <div className="flex items-center justify-between">
               <div>
                 <DialogTitle className="text-2xl font-bold flex items-center gap-3">
@@ -501,6 +550,29 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
               )}
             </div>
           </DialogHeader>
+          
+          {/* Sticky error message */}
+          {editError && (
+            <div className="sticky top-0 z-10 px-8 py-4 bg-white/95 backdrop-blur-sm dark:bg-slate-900/95 border-b border-border">
+              <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center">
+                      <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
+                      Update Failed
+                    </h4>
+                    <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">
+                      {editError}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           <form onSubmit={handleEditSubmit}>
             <div className="max-h-[65vh] overflow-y-auto px-8 py-8 bg-gray-50 dark:bg-slate-800/50">
@@ -522,9 +594,20 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                   return 0;
                 }).map((f) => (
                   <div key={f} className="space-y-3">
-                  <label className="text-sm font-semibold text-foreground" htmlFor={`edit-${f}`}>
-                    {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-semibold text-foreground" htmlFor={`edit-${f}`}>
+                      {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
+                    </label>
+                    {(f.toLowerCase().includes('json') || f.toLowerCase().includes('data') || f.toLowerCase().includes('config') || f.toLowerCase().includes('metadata') || f.toLowerCase().includes('settings')) && (
+                      <span className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-3 py-1 rounded-full font-medium">
+                        {f.toLowerCase().includes('json') ? 'JSON' : 
+                         f.toLowerCase().includes('data') ? 'Data' :
+                         f.toLowerCase().includes('config') ? 'Config' :
+                         f.toLowerCase().includes('metadata') ? 'Metadata' :
+                         f.toLowerCase().includes('settings') ? 'Settings' : 'Object'}
+                      </span>
+                    )}
+                  </div>
                   {predefinedFields[f] ? (
                     <div className="space-y-3">
                       {(() => {
@@ -642,6 +725,104 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                         className="h-11 text-base"
                         placeholder="YYYY-MM-DD"
                       />
+                    ) : (f.toLowerCase().includes('json') || f.toLowerCase().includes('data') || f.toLowerCase().includes('config') || f.toLowerCase().includes('metadata') || f.toLowerCase().includes('settings')) ? (
+                      <div className="space-y-3">
+                        
+                        <div className="relative group">
+                          <textarea
+                            id={`edit-${f}`}
+                            value={editForm[f] ?? ''}
+                            onChange={e => {
+                              const value = e.target.value;
+                              handleEditFormChange(f, value);
+                            }}
+                            disabled={editLoading}
+                            className="w-full min-h-[220px] p-5 text-sm font-mono bg-background border border-border rounded-xl resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 shadow-sm hover:shadow-md"
+                            placeholder={`Enter valid JSON for ${f.charAt(0).toLowerCase() + f.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase()}`}
+                          />
+                          
+                          {/* JSON validation indicator */}
+                          {editForm[f] && (
+                            <div className="absolute top-3 right-3">
+                              {(() => {
+                                try {
+                                  JSON.parse(editForm[f]);
+                                  return (
+                                    <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
+                                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                                    </div>
+                                  );
+                                } catch (e) {
+                                  return (
+                                    <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-sm">
+                                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                                    </div>
+                                  );
+                                }
+                              })()}
+                            </div>
+                          )}
+                          
+                          {/* Floating label for empty state */}
+                          {!editForm[f] && (
+                            <div className="absolute top-4 left-4 text-muted-foreground/50 text-sm pointer-events-none">
+                              Start typing JSON...
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center justify-between px-1">
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            {editForm[f] && (
+                              <span className="text-xs font-medium">
+                                {(() => {
+                                  try {
+                                    const parsed = JSON.parse(editForm[f]);
+                                    const keyCount = Object.keys(parsed).length;
+                                    return `${keyCount} key${keyCount !== 1 ? 's' : ''}`;
+                                  } catch (e) {
+                                    return 'Invalid JSON';
+                                  }
+                                })()}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  const parsed = JSON.parse(editForm[f] || '{}');
+                                  const formatted = JSON.stringify(parsed, null, 2);
+                                  handleEditFormChange(f, formatted);
+                                } catch (e) {
+                                  // Handle invalid JSON
+                                }
+                              }}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-all duration-200 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:shadow-sm"
+                              disabled={editLoading}
+                            >
+                              Format
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  const parsed = JSON.parse(editForm[f] || '{}');
+                                  navigator.clipboard.writeText(JSON.stringify(parsed, null, 2));
+                                } catch (e) {
+                                  // Handle invalid JSON
+                                }
+                              }}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-all duration-200 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:shadow-sm"
+                              disabled={editLoading}
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     ) : (
                       <Input
                         id={`edit-${f}`}
@@ -656,28 +837,6 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                 </div>
               ))}
               </div>
-              
-              {editError && (
-                <div className="px-8 mt-6">
-                  <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0">
-                        <div className="w-8 h-8 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center">
-                          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
-                          Update Failed
-                        </h4>
-                        <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">
-                          {editError}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
             
             {/* Enhanced Footer for Save/Cancel */}
