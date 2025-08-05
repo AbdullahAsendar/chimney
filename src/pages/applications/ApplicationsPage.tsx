@@ -12,7 +12,7 @@ const ApplicationsPage = () => (
     'submitDate',
     'completeDate'
   ]}
-  enableCreate={true}
+  enableCreate={false}
   enableEdit={true}
   enableDelete={true}
   predefinedFields={{

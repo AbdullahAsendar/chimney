@@ -9,7 +9,7 @@ import {
   SortingState,
   useReactTable,
 } from '@tanstack/react-table';
-import { Search, X, Settings2, Pencil, Trash2, Check, Save, AlertCircle } from 'lucide-react';
+import { Search, X, Settings2, Pencil, Trash2, Check, Save, AlertCircle, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -100,6 +100,10 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
   const [editForm, setEditForm] = useState<any>({});
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createForm, setCreateForm] = useState<any>({});
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Handler to batch search and page reset
   const handleSearch = () => {
@@ -232,6 +236,88 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
     }
     setEditForm((prev: any) => ({ ...prev, [field]: formattedValue }));
   };
+
+  const handleCreateFormChange = (field: string, value: any) => {
+    // Format date fields to YYYY-MM-DD for display
+    let formattedValue = value;
+    if (field.toLowerCase().includes('date') && value) {
+      try {
+        const date = new Date(value);
+        if (!isNaN(date.getTime())) {
+          formattedValue = date.toISOString().split('T')[0];
+        }
+      } catch (e) {
+        // If date parsing fails, keep original value
+      }
+    }
+    setCreateForm((prev: any) => ({ ...prev, [field]: formattedValue }));
+  };
+
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateLoading(true);
+    setCreateError(null);
+    try {
+      const auth = authHelper.getAuth();
+      const accessToken = auth?.access_token;
+      const accountId = localStorage.getItem('chimney-user-id');
+      const url = `${apiBaseUrl}/${service}/api/v1/chimney/${entity}`;
+      
+      // Remove system fields and ignore empty values
+      const { id, createTimestamp, updateTimestamp, createdByAccountId, updatedByAccountId, source, error, jobId, customerType, ...attributes } = createForm;
+      let filteredAttributes = Object.fromEntries(
+        Object.entries(attributes).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
+      );
+      
+      // Handle predefined fields based on their type when sending to API
+      Object.keys(filteredAttributes).forEach(field => {
+        if (predefinedFields[field]) {
+          const fieldConfig = predefinedFields[field];
+          const isMultiSelect = Array.isArray(fieldConfig);
+          const isSingleSelect = !isMultiSelect && (fieldConfig as any).type === 'single';
+          
+          if (isMultiSelect && Array.isArray(filteredAttributes[field])) {
+            // Convert multi-select arrays to comma-separated string for API
+            filteredAttributes[field] = filteredAttributes[field].join(',');
+          }
+          // For single select, keep as string (no conversion needed)
+        }
+      });
+      
+      const payload = {
+        data: {
+          type: entity,
+          attributes: filteredAttributes,
+        },
+      };
+      
+      const response = await axios.post(url, payload, {
+        headers: {
+          ...(accessToken ? { 'sdd-token': accessToken } : {}),
+          ...(accountId ? { 'account-id': accountId } : {}),
+          'accept': 'application/vnd.api+json',
+          'content-type': 'application/vnd.api+json',
+        },
+      });
+      
+      // Add the new item to the list
+      const newItem = response.data?.data;
+      if (newItem) {
+        const attrs = newItem.attributes || {};
+        const row: any = { id: newItem.id ?? '', ...attrs };
+        setRows((prev) => [row, ...prev]);
+        setTotal((prev) => prev + 1);
+      }
+      
+      setShowCreateDialog(false);
+      setCreateForm({});
+    } catch (e: any) {
+      setCreateError(e.message || 'Failed to create item');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editRow) return;
@@ -424,7 +510,19 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
     const { table } = useDataGrid();
     return (
       <CardToolbar>
-
+        {enableCreate && (
+          <Button 
+            onClick={() => {
+              setCreateForm({});
+              setCreateError(null);
+              setShowCreateDialog(true);
+            }}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Create {entity.charAt(0).toUpperCase() + entity.slice(1)}
+          </Button>
+        )}
         <DataGridColumnVisibility
           table={table}
           trigger={
@@ -863,6 +961,247 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                       <>
                         <Save className="mr-2 h-4 w-4" />
                         Save Changes
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="bg-white dark:bg-slate-900 px-8 py-6 border-b border-border">
+            <DialogTitle className="text-xl font-semibold text-foreground">
+              Create New {entity.charAt(0).toUpperCase() + entity.slice(1)}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Fill in the details to create a new {entity.charAt(0).toLowerCase() + entity.slice(1)}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {createError && (
+            <div className="sticky top-0 z-10 px-8 py-4 bg-white/95 backdrop-blur-sm dark:bg-slate-900/95 border-b border-border">
+              <Alert variant="destructive" appearance="light" onClose={() => setCreateError(null)}>
+                <AlertIcon />
+                <AlertTitle>{createError}</AlertTitle>
+              </Alert>
+            </div>
+          )}
+
+          <form onSubmit={handleCreateSubmit} className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-y-auto px-8 py-6 bg-gray-50 dark:bg-gray-900/50">
+              <div className="space-y-6">
+                {fields.filter(f => f.toLowerCase() !== 'id').map(f => (
+                  <div key={f} className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground" htmlFor={`create-${f}`}>
+                      {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
+                    </label>
+                    
+                    {predefinedFields[f] ? (
+                      (() => {
+                        const fieldConfig = predefinedFields[f];
+                        const isMultiSelect = Array.isArray(fieldConfig);
+                        const options = isMultiSelect ? fieldConfig : (fieldConfig as any).options;
+                        const isSingleSelect = !isMultiSelect && (fieldConfig as any).type === 'single';
+                        
+                        if (isSingleSelect) {
+                          return (
+                            <div className="space-y-2">
+                              {options.map((option: string) => (
+                                <label key={option} className="flex items-center space-x-2 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name={`create-${f}`}
+                                    value={option}
+                                    checked={createForm[f] === option}
+                                    onChange={(e) => handleCreateFormChange(f, e.target.value)}
+                                    disabled={createLoading}
+                                    className="text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-foreground">{option}</span>
+                                </label>
+                              ))}
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="space-y-2">
+                              {options.map((option: string) => (
+                                <label key={option} className="flex items-center space-x-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={Array.isArray(createForm[f]) ? createForm[f].includes(option) : false}
+                                    onChange={(e) => {
+                                      const currentValues = Array.isArray(createForm[f]) ? createForm[f] : [];
+                                      if (e.target.checked) {
+                                        handleCreateFormChange(f, [...currentValues, option]);
+                                      } else {
+                                        handleCreateFormChange(f, currentValues.filter((v: string) => v !== option));
+                                      }
+                                    }}
+                                    disabled={createLoading}
+                                    className="text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-foreground">{option}</span>
+                                </label>
+                              ))}
+                            </div>
+                          );
+                        }
+                      })()
+                    ) : (f.toLowerCase().includes('date')) ? (
+                      <Input
+                        id={`create-${f}`}
+                        type="date"
+                        value={createForm[f] ?? ''}
+                        onChange={e => handleCreateFormChange(f, e.target.value)}
+                        disabled={createLoading}
+                        className="h-11 text-base"
+                      />
+                    ) : (f.toLowerCase().includes('json') || f.toLowerCase().includes('data') || f.toLowerCase().includes('config') || f.toLowerCase().includes('metadata') || f.toLowerCase().includes('settings')) ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm font-semibold text-foreground" htmlFor={`create-${f}`}>
+                            {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
+                          </label>
+                          <span className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-3 py-1 rounded-full font-medium">
+                            {f.toLowerCase().includes('json') ? 'JSON' : 
+                             f.toLowerCase().includes('data') ? 'Data' :
+                             f.toLowerCase().includes('config') ? 'Config' :
+                             f.toLowerCase().includes('metadata') ? 'Metadata' :
+                             f.toLowerCase().includes('settings') ? 'Settings' : 'Object'}
+                          </span>
+                        </div>
+                        <div className="relative group">
+                          <textarea
+                            id={`create-${f}`}
+                            value={createForm[f] ?? ''}
+                            onChange={e => handleCreateFormChange(f, e.target.value)}
+                            disabled={createLoading}
+                            className="w-full min-h-[220px] p-5 text-sm font-mono bg-background border border-border rounded-xl resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 shadow-sm hover:shadow-md"
+                            placeholder={`Enter valid JSON for ${f.charAt(0).toLowerCase() + f.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase()}`}
+                          />
+                          {createForm[f] && (
+                            <div className="absolute top-4 right-4">
+                              {(() => {
+                                try {
+                                  JSON.parse(createForm[f]);
+                                  return (
+                                    <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
+                                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                                    </div>
+                                  );
+                                } catch (e) {
+                                  return (
+                                    <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-sm">
+                                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                                    </div>
+                                  );
+                                }
+                              })()}
+                            </div>
+                          )}
+                          
+                          {!createForm[f] && (
+                            <div className="absolute top-4 left-4 text-muted-foreground/50 text-sm pointer-events-none">
+                              Start typing JSON...
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center justify-between px-1">
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            {createForm[f] && (
+                              <span className="text-xs font-medium">
+                                {(() => {
+                                  try {
+                                    const parsed = JSON.parse(createForm[f]);
+                                    const keyCount = Object.keys(parsed).length;
+                                    return `${keyCount} key${keyCount !== 1 ? 's' : ''}`;
+                                  } catch (e) {
+                                    return 'Invalid JSON';
+                                  }
+                                })()}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  const parsed = JSON.parse(createForm[f] || '{}');
+                                  const formatted = JSON.stringify(parsed, null, 2);
+                                  handleCreateFormChange(f, formatted);
+                                } catch (e) {
+                                  // Handle invalid JSON
+                                }
+                              }}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-all duration-200 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:shadow-sm"
+                              disabled={createLoading}
+                            >
+                              Format
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  const parsed = JSON.parse(createForm[f] || '{}');
+                                  navigator.clipboard.writeText(JSON.stringify(parsed, null, 2));
+                                } catch (e) {
+                                  // Handle invalid JSON
+                                }
+                              }}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-all duration-200 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:shadow-sm"
+                              disabled={createLoading}
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <Input
+                        id={`create-${f}`}
+                        value={createForm[f] ?? ''}
+                        onChange={e => handleCreateFormChange(f, e.target.value)}
+                        disabled={createLoading}
+                        className="h-11 text-base"
+                        placeholder={`Enter ${f.charAt(0).toLowerCase() + f.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase()}`}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Enhanced Footer for Create/Cancel */}
+            <div className="border-t border-border bg-white dark:bg-slate-900 px-8 py-6 mt-0">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                <div className="text-xs text-muted-foreground">
+                  <span>Creating new {entity.charAt(0).toLowerCase() + entity.slice(1)} • {new Date().toLocaleDateString()}</span>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <DialogClose asChild>
+                    <Button type="button" variant="outline" disabled={createLoading} className="flex-1 sm:flex-none">
+                      Cancel
+                    </Button>
+                  </DialogClose>
+                  <Button type="submit" variant="primary" disabled={createLoading} className="flex-1 sm:flex-none shadow-lg hover:shadow-xl transition-shadow">
+                    {createLoading ? (
+                      <>
+                        <span className="animate-spin mr-2 w-4 h-4 inline-block border-2 border-current border-t-transparent rounded-full" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create {entity.charAt(0).toUpperCase() + entity.slice(1)}
                       </>
                     )}
                   </Button>
