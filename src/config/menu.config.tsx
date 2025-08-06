@@ -8,6 +8,7 @@ import {
   Inspect,
   RefreshCw,
   Shield,
+  UserX,
 } from 'lucide-react';
 import { type MenuConfig } from './types';
 
@@ -41,6 +42,11 @@ export const MENU_SIDEBAR: MenuConfig = [
         title: 'Property Blocks',
         icon: FileWarning,
         path: '/property-blocks',
+      },
+      {
+        title: 'Customer Blocks',
+        icon: UserX,
+        path: '/customer-blocks',
       },
     ],
   },
