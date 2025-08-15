@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { LoaderCircleIcon, AlertCircle, X, Clipboard, Shield, Lock, Eye, EyeOff } from 'lucide-react';
 import { AccountDeactivatedDialog } from '@/partials/dialogs/account-deactivated-dialog';
 import { toAbsoluteUrl } from '@/lib/helpers';
+import { EnvironmentToggle } from '@/components/common/environment-toggle';
 
 export function SignInPage() {
   const [searchParams] = useSearchParams();
@@ -64,8 +65,11 @@ export function SignInPage() {
 
   return (
     <>
-      <div className="min-h-screen flex items-center justify-center p-6 sm:p-8">
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 sm:p-8">
         <div className="w-full max-w-md mx-auto">
+          <div className="flex justify-end mb-4">
+            <EnvironmentToggle />
+          </div>
           <Card className="shadow-2xl border-0 bg-white/95 backdrop-blur-sm dark:bg-slate-900/95 dark:border-slate-700/50">
             <CardHeader className="text-center pb-8 pt-8">
               <div className="flex justify-center mb-1">
@@ -82,8 +86,8 @@ export function SignInPage() {
             <CardContent className="space-y-8 px-8 pb-8 bg-gray-50 dark:bg-slate-800/50">
               {error && !showDeactivated && (
                 <Alert variant="destructive" className="border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>{error}</AlertTitle>
+                  <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  <AlertTitle className="text-red-800 dark:text-red-200">{error}</AlertTitle>
                 </Alert>
               )}
               

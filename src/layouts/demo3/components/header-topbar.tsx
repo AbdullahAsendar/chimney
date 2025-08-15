@@ -13,6 +13,7 @@ import {
 import { Link, useLocation } from 'react-router-dom';
 import { toAbsoluteUrl } from '@/lib/helpers';
 import { Button } from '@/components/ui/button';
+import { EnvironmentToggle } from '@/components/common/environment-toggle';
 
 export function HeaderTopbar() {
   const { pathname } = useLocation();
@@ -75,6 +76,7 @@ export function HeaderTopbar() {
                 </Button>
               }
             />
+            <EnvironmentToggle />
             <UserDropdownMenu
               trigger={
                 <img

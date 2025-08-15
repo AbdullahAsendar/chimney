@@ -14,11 +14,7 @@ const PropertyBlocksPage = () => (
       'reasonId',
       'sourceId',
       'referenceNumber',
-      'releaseDate',
-      'createdByAccountId',
-      'createTimestamp',
-      'updatedByAccountId',
-      'updateTimestamp'
+      'releaseDate'
     ]}
     enableCreate={true}
     enableEdit={true}

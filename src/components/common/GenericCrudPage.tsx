@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
   ColumnDef,
   getCoreRowModel,
@@ -9,7 +9,7 @@ import {
   SortingState,
   useReactTable,
 } from '@tanstack/react-table';
-import { Search, X, Settings2, Pencil, Trash2, Check, Save, AlertCircle, Plus } from 'lucide-react';
+import { Search, X, Settings2, Pencil, Trash2, Check, Save, AlertCircle, Plus, RefreshCw, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -30,6 +30,26 @@ import {
 } from '@/components/ui/data-grid-table';
 import { Input } from '@/components/ui/input';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import * as authHelper from '@/auth/lib/helpers';
 import axios from 'axios';
 import { useEnvironment } from '@/providers/environment-provider';
@@ -64,9 +84,22 @@ interface GenericCrudPageProps {
   enableEdit?: boolean;
   enableDelete?: boolean;
   editAllAttributes?: boolean;
-  predefinedFields?: Record<string, string[] | { type: 'single' | 'multi'; options: string[] }>; // fieldName -> array of possible values or object with type and options
+  predefinedFields?: Record<string, string[] | { type: 'single' | 'multi'; options: string[] } | { type: 'single' | 'multi'; apiEndpoint: string; service: string }>; // fieldName -> array of possible values or object with type and options or API endpoint
   updateableFields?: string[]; // fields that can be updated, if not provided all fields are updateable
   createDefaults?: Record<string, any>; // default values for create form
+  relationshipFields?: Record<string, string>; // relationship field name -> display field name (e.g., 'workflowStep' -> 'workflowStepId')
+  relationshipOptions?: Record<string, { service: string; entity: string; labelField?: string; valueField?: string; isLookupEndpoint?: boolean }>; // relationship field name -> options configuration
+  customFilters?: Array<{
+    key: string;
+    label: string;
+    filterValue: string;
+    type?: 'static' | 'dynamic';
+    options?: Array<{ value: string; label: string }>;
+    apiEndpoint?: string;
+    service?: string;
+    labelField?: string;
+    valueField?: string;
+  }>; // custom API filter options
 }
 
 const PAGE_SIZE = 10;
@@ -82,6 +115,9 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
   predefinedFields = {},
   updateableFields,
   createDefaults = {},
+  relationshipFields = {},
+  relationshipOptions = {},
+  customFilters = [],
 }) => {
   const { apiBaseUrl } = useEnvironment();
   const [rows, setRows] = useState<any[]>([]);
@@ -96,8 +132,6 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [pendingSearchQuery, setPendingSearchQuery] = useState('');
-  const [rowToDelete, setRowToDelete] = useState<any | null>(null);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editRow, setEditRow] = useState<any | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [editLoading, setEditLoading] = useState(false);
@@ -106,6 +140,253 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
   const [createForm, setCreateForm] = useState<any>({});
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [relationshipOptionsData, setRelationshipOptionsData] = useState<Record<string, any[]>>({});
+  const [relationshipOptionsLoading, setRelationshipOptionsLoading] = useState<Record<string, boolean>>({});
+  const [relationshipOptionsError, setRelationshipOptionsError] = useState<Record<string, boolean>>({});
+  const [relationshipLookupData, setRelationshipLookupData] = useState<Record<string, Record<string, any>>>({});
+  const [selectedCustomFilter, setSelectedCustomFilter] = useState<string>('all');
+  const [openDropdowns, setOpenDropdowns] = useState<Record<string, boolean>>({});
+  const [predefinedFieldsData, setPredefinedFieldsData] = useState<Record<string, string[]>>({});
+  const [predefinedFieldsLoading, setPredefinedFieldsLoading] = useState<Record<string, boolean>>({});
+  const [predefinedFieldsError, setPredefinedFieldsError] = useState<Record<string, boolean>>({});
+  const [customFiltersData, setCustomFiltersData] = useState<Record<string, any[]>>({});
+  const [customFiltersLoading, setCustomFiltersLoading] = useState<Record<string, boolean>>({});
+  const [customFiltersError, setCustomFiltersError] = useState<Record<string, boolean>>({});
+  const [dynamicFilterValues, setDynamicFilterValues] = useState<Record<string, string>>({});
+  const isFetchingRef = useRef(false);
+  const prevValuesRef = useRef<{
+    entity: string;
+    service: string;
+    pageIndex: number;
+    pageSize: number;
+    searchQuery: string;
+    apiBaseUrl: string;
+    sorting: SortingState;
+    selectedCustomFilter: string;
+    customFilters: any[];
+  } | null>(null);
+  const prevValuesHashRef = useRef<string>('');
+  const [modalLoading, setModalLoading] = useState(false);
+  const customFilterFetchingRef = useRef<Record<string, boolean>>({});
+  const fetchedCustomFiltersRef = useRef<Set<string>>(new Set());
+
+  // Memoize relationship field lookup for better performance
+  const relationshipFieldLookup = useMemo(() => {
+    const lookup: Record<string, string> = {};
+    if (relationshipFields) {
+      Object.entries(relationshipFields).forEach(([key, value]) => {
+        lookup[value] = key;
+      });
+    }
+    return lookup;
+  }, [relationshipFields]);
+
+  // Memoize predefined field options for better performance
+  const getPredefinedFieldOptions = useCallback((fieldName: string) => {
+    const fieldConfig = predefinedFields[fieldName];
+    if (!fieldConfig) return { options: [], isLoading: false, hasError: false };
+    
+    if (typeof fieldConfig === 'string') {
+      return { options: fieldConfig, isLoading: false, hasError: false };
+    }
+    
+    if (Array.isArray(fieldConfig)) {
+      return { options: fieldConfig, isLoading: false, hasError: false };
+    }
+    
+    if ('apiEndpoint' in fieldConfig) {
+      const options = predefinedFieldsData[fieldName] || [];
+      const isLoading = predefinedFieldsLoading[fieldName] || false;
+      const hasError = predefinedFieldsError[fieldName] || false;
+      return { options, isLoading, hasError };
+    }
+    
+    return { options: fieldConfig.options || [], isLoading: false, hasError: false };
+  }, [predefinedFields, predefinedFieldsData, predefinedFieldsLoading, predefinedFieldsError]);
+
+  // Function to fetch predefined field options from API
+  const fetchPredefinedFieldOptions = async (fieldName: string) => {
+    const fieldConfig = predefinedFields[fieldName];
+    if (!fieldConfig || typeof fieldConfig === 'string' || !('apiEndpoint' in fieldConfig)) return;
+
+    // Don't fetch if already loading or if there was an error
+    if (predefinedFieldsLoading[fieldName] || predefinedFieldsError[fieldName]) {
+      return;
+    }
+
+    setPredefinedFieldsLoading(prev => ({ ...prev, [fieldName]: true }));
+    setPredefinedFieldsError(prev => ({ ...prev, [fieldName]: false }));
+    
+    try {
+      const auth = authHelper.getAuth();
+      const accessToken = auth?.access_token;
+      const accountId = localStorage.getItem('chimney-user-id');
+      
+      const url = `${apiBaseUrl}/${fieldConfig.service}/api/v1/${fieldConfig.apiEndpoint}`;
+      
+      const response = await axios.get(url, {
+        headers: {
+          ...(accessToken ? { 'sdd-token': accessToken } : {}),
+          ...(accountId ? { 'account-id': accountId } : {}),
+          'Content-Type': 'application/json',
+          accept: '*/*',
+        },
+      });
+      
+      let data = response.data;
+      if (typeof data === 'string') data = JSON.parse(data);
+      
+      // Handle array response
+      const options = Array.isArray(data) ? data : [];
+      
+      setPredefinedFieldsData(prev => ({ ...prev, [fieldName]: options }));
+    } catch (error) {
+      console.error(`Failed to fetch predefined field options for ${fieldName}:`, error);
+      setPredefinedFieldsData(prev => ({ ...prev, [fieldName]: [] }));
+      setPredefinedFieldsError(prev => ({ ...prev, [fieldName]: true }));
+    } finally {
+      setPredefinedFieldsLoading(prev => ({ ...prev, [fieldName]: false }));
+    }
+  };
+
+  // Function to fetch relationship options
+  const fetchRelationshipOptions = async (relationshipKey: string) => {
+    const config = relationshipOptions[relationshipKey];
+    if (!config) return;
+
+    // Don't fetch if already loading or if there was an error
+    if (relationshipOptionsLoading[relationshipKey] || relationshipOptionsError[relationshipKey]) {
+      return;
+    }
+
+    setRelationshipOptionsLoading(prev => ({ ...prev, [relationshipKey]: true }));
+    setRelationshipOptionsError(prev => ({ ...prev, [relationshipKey]: false }));
+    
+    try {
+      const auth = authHelper.getAuth();
+      const accessToken = auth?.access_token;
+      const accountId = localStorage.getItem('chimney-user-id');
+      
+      let url: string;
+      if (config.isLookupEndpoint) {
+        // For lookup endpoints, use the entity path directly
+        url = `${apiBaseUrl}/${config.service}/api/v1/${config.entity}`;
+      } else {
+        // For regular endpoints, use the chimney path with pagination
+        const params = new URLSearchParams();
+        params.append('page[size]', '100');
+        url = `${apiBaseUrl}/${config.service}/api/v1/chimney/${config.entity}?${params.toString()}`;
+      }
+      
+      const response = await axios.get(url, {
+        headers: {
+          ...(accessToken ? { 'sdd-token': accessToken } : {}),
+          ...(accountId ? { 'account-id': accountId } : {}),
+          'Content-Type': 'application/json',
+          accept: '*/*',
+        },
+      });
+
+      let data = response.data;
+      if (typeof data === 'string') data = JSON.parse(data);
+      
+      let items: any[] = [];
+      if (config.isLookupEndpoint) {
+        // For lookup endpoints, data is in result array
+        items = Array.isArray(data.result) ? data.result : [];
+      } else {
+        // For regular endpoints, data is in data array
+        items = Array.isArray(data.data) ? data.data : [];
+      }
+      
+      setRelationshipOptionsData(prev => ({ ...prev, [relationshipKey]: items }));
+      
+      // Create lookup map for quick access by ID
+      const lookupMap: Record<string, any> = {};
+      items.forEach(item => {
+        const id = item[config.valueField || 'id'];
+        const label = item[config.labelField || 'name'];
+        const source = item.source;
+        
+        // For workflow lookups, include source in the label if available
+        let displayLabel = label;
+        if (relationshipKey === 'workflow' && source) {
+          displayLabel = `${label} (${source})`;
+        }
+        
+        lookupMap[id] = { id, label: displayLabel, source, ...item };
+      });
+      console.log(`Relationship lookup data for ${relationshipKey}:`, lookupMap);
+      setRelationshipLookupData(prev => ({ ...prev, [relationshipKey]: lookupMap }));
+    } catch (error) {
+      console.error(`Failed to fetch options for ${relationshipKey}:`, error);
+      setRelationshipOptionsData(prev => ({ ...prev, [relationshipKey]: [] }));
+      setRelationshipOptionsError(prev => ({ ...prev, [relationshipKey]: true }));
+    } finally {
+      setRelationshipOptionsLoading(prev => ({ ...prev, [relationshipKey]: false }));
+    }
+  };
+
+  // Function to fetch custom filter options from API
+  const fetchCustomFilterOptions = useCallback(async (filterKey: string) => {
+    const filter = customFilters.find(f => f.key === filterKey);
+    if (!filter || !filter.apiEndpoint) return;
+
+    // Don't fetch if already loading or if there was an error
+    if (customFilterFetchingRef.current[filterKey] || customFiltersLoading[filterKey] || customFiltersError[filterKey]) {
+      return;
+    }
+
+    customFilterFetchingRef.current[filterKey] = true;
+
+    setCustomFiltersLoading(prev => ({ ...prev, [filterKey]: true }));
+    setCustomFiltersError(prev => ({ ...prev, [filterKey]: false }));
+    
+    try {
+      const auth = authHelper.getAuth();
+      const accessToken = auth?.access_token;
+      const accountId = localStorage.getItem('chimney-user-id');
+      
+      const url = `${apiBaseUrl}/${filter.service}/api/v1/${filter.apiEndpoint}`;
+      
+      const response = await axios.get(url, {
+        headers: {
+          ...(accessToken ? { 'sdd-token': accessToken } : {}),
+          ...(accountId ? { 'account-id': accountId } : {}),
+          'Content-Type': 'application/json',
+          accept: '*/*',
+        },
+      });
+      
+      let data = response.data;
+      if (typeof data === 'string') data = JSON.parse(data);
+      
+      // Handle different response formats
+      let options: any[] = [];
+      if (Array.isArray(data)) {
+        // Direct array response
+        options = data;
+      } else if (data && Array.isArray(data.result)) {
+        // Response with result array (common for lookup endpoints)
+        options = data.result;
+      } else if (data && Array.isArray(data.data)) {
+        // Response with data array
+        options = data.data;
+      }
+      
+      console.log(`Custom filter options for ${filterKey}:`, options);
+      
+      setCustomFiltersData(prev => ({ ...prev, [filterKey]: options }));
+      fetchedCustomFiltersRef.current.add(filterKey);
+    } catch (error) {
+      console.error(`Failed to fetch custom filter options for ${filterKey}:`, error);
+      setCustomFiltersData(prev => ({ ...prev, [filterKey]: [] }));
+      setCustomFiltersError(prev => ({ ...prev, [filterKey]: true }));
+    } finally {
+      setCustomFiltersLoading(prev => ({ ...prev, [filterKey]: false }));
+      customFilterFetchingRef.current[filterKey] = false;
+    }
+  }, [customFilters, apiBaseUrl]);
 
   // Handler to batch search and page reset
   const handleSearch = () => {
@@ -117,9 +398,60 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
   };
 
   useEffect(() => {
+    // Check if values have actually changed using efficient hash comparison
+    const currentValues = {
+      entity,
+      service,
+      pageIndex: tableState.pageIndex,
+      pageSize: tableState.pageSize,
+      searchQuery: tableState.searchQuery,
+      apiBaseUrl,
+      sorting,
+      selectedCustomFilter,
+      customFilters
+    };
+    
+    // Create a simple hash for comparison (much faster than JSON.stringify)
+    const currentHash = `${entity}-${service}-${tableState.pageIndex}-${tableState.pageSize}-${tableState.searchQuery}-${apiBaseUrl}-${selectedCustomFilter}-${customFilters.length}-${JSON.stringify(dynamicFilterValues)}`;
+    
+    if (prevValuesHashRef.current === currentHash) {
+      return; // Values haven't changed, don't fetch
+    }
+    
+    // Prevent multiple simultaneous requests
+    if (isFetchingRef.current) {
+      return;
+    }
+    
+    prevValuesRef.current = currentValues;
+    prevValuesHashRef.current = currentHash;
+    isFetchingRef.current = true;
     setLoading(true);
     setError(null);
-    const filterQuery = tableState.searchQuery ? `&filter=${encodeURIComponent(tableState.searchQuery)}` : '';
+    
+    // Build filter query from search and custom filters
+    let filterQuery = '';
+    
+    if (tableState.searchQuery) {
+      filterQuery += `&filter=${encodeURIComponent(tableState.searchQuery)}`;
+    }
+    
+    // Add custom filter if selected
+    if (selectedCustomFilter !== 'all' && customFilters.length > 0) {
+      const selectedFilter = customFilters.find(f => f.key === selectedCustomFilter);
+      if (selectedFilter) {
+        if (selectedFilter.type === 'dynamic' && dynamicFilterValues[selectedFilter.key]) {
+          // For dynamic filters, use the selected value
+          const dynamicValue = dynamicFilterValues[selectedFilter.key];
+          const dynamicFilter = selectedFilter.filterValue.replace('{value}', dynamicValue);
+          filterQuery += `&filter=${encodeURIComponent(dynamicFilter)}`;
+        } else {
+          // For static filters, use the predefined value
+          filterQuery += `&filter=${encodeURIComponent(selectedFilter.filterValue)}`;
+        }
+      }
+    }
+    
     // Build sort query string from sorting state
     const sortQuery = sorting.length > 0
       ? `&sort=${sorting.map(s => (s.desc ? '-' : '') + s.id).join(',')}`
@@ -143,7 +475,23 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
         const items = Array.isArray(data.data)
           ? data.data.map((item: any) => {
               const attrs = item.attributes || {};
+              const relationships = item.relationships || {};
+              
               const row: any = { id: item.id ?? '', ...attrs };
+              
+              // Process relationships
+              if (relationshipFields && Object.keys(relationshipFields).length > 0) {
+                Object.keys(relationshipFields).forEach(relKey => {
+                  const displayField = relationshipFields[relKey];
+                  const relData = relationships[relKey]?.data;
+                  if (relData) {
+                    row[displayField] = relData.id;
+                  } else {
+                    row[displayField] = null;
+                  }
+                });
+              }
+              
               return row;
             })
           : [];
@@ -151,40 +499,87 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
         setTotal(data.meta?.page?.totalRecords || items.length);
       })
       .catch((e: any) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [entity, service, tableState, apiBaseUrl, sorting]);
+      .finally(() => {
+        setLoading(false);
+        isFetchingRef.current = false;
+      });
+  }, [entity, service, tableState, apiBaseUrl, sorting, selectedCustomFilter, customFilters]);
 
-  // Delete handler
-  const handleDelete = async (row: any) => {
-    setRowToDelete(row);
-    setShowDeleteDialog(true);
-  };
+  // Cleanup function to reset ref when component unmounts
+  useEffect(() => {
+    return () => {
+      isFetchingRef.current = false;
+      customFilterFetchingRef.current = {};
+      fetchedCustomFiltersRef.current.clear();
+    };
+  }, []);
 
-  const confirmDelete = async () => {
-    if (!rowToDelete) return;
+  // Fetch relationship options when component loads (lazy loading)
+  useEffect(() => {
+    console.log('Fetching relationship options for:', relationshipOptions ? Object.keys(relationshipOptions) : []);
+    if (relationshipOptions && Object.keys(relationshipOptions).length > 0) {
+      // Use setTimeout to defer loading and improve initial page load
+      const timeoutId = setTimeout(() => {
+        Object.keys(relationshipOptions).forEach(relKey => {
+          fetchRelationshipOptions(relKey);
+        });
+      }, 100); // Small delay to prioritize main data loading
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [relationshipOptions, apiBaseUrl]);
+
+  // Fetch dynamic custom filter options when selected
+  useEffect(() => {
+    console.log('Dynamic filter useEffect triggered:', { selectedCustomFilter, customFilters: customFilters.length });
+    if (selectedCustomFilter !== 'all') {
+      const filter = customFilters.find(f => f.key === selectedCustomFilter);
+      if (filter && filter.type === 'dynamic' && filter.apiEndpoint) {
+        // Check if we've already fetched this filter
+        if (!fetchedCustomFiltersRef.current.has(selectedCustomFilter)) {
+          console.log('Fetching custom filter options for:', selectedCustomFilter);
+          fetchCustomFilterOptions(selectedCustomFilter);
+        }
+      }
+    }
+  }, [selectedCustomFilter, customFilters, fetchCustomFilterOptions]);
+
+  // Soft delete handler (activate/deactivate) - direct toggle without confirmation
+  const handleToggleDeleted = async (row: any) => {
     try {
-      setLoading(true);
-      setError(null);
       const auth = authHelper.getAuth();
       const accessToken = auth?.access_token;
       const accountId = localStorage.getItem('chimney-user-id');
-      const url = `${apiBaseUrl}/${service}/api/v1/chimney/${entity}/${rowToDelete.id}`;
-      await axios.delete(url, {
+      const url = `${apiBaseUrl}/${service}/api/v1/chimney/${entity}/${row.id}`;
+      
+      // Toggle the deleted status
+      const newDeletedStatus = !row.deleted;
+      
+      const payload = {
+        data: {
+          type: entity,
+          id: row.id,
+          attributes: {
+            deleted: newDeletedStatus
+          }
+        }
+      };
+      
+      await axios.patch(url, payload, {
         headers: {
           ...(accessToken ? { 'sdd-token': accessToken } : {}),
           ...(accountId ? { 'account-id': accountId } : {}),
-          'Content-Type': 'application/json',
-          accept: '*/*',
+          'accept': 'application/vnd.api+json',
+          'content-type': 'application/vnd.api+json',
         },
       });
-      setRows((prev) => prev.filter((r) => r.id !== rowToDelete.id));
-      setTotal((prev) => prev - 1);
-      setShowDeleteDialog(false);
-      setRowToDelete(null);
+      
+      // Update the row in the table
+      setRows((prev) => prev.map((r) => 
+        r.id === row.id ? { ...r, deleted: newDeletedStatus } : r
+      ));
     } catch (e: any) {
-      setError(e.message || 'Failed to delete item');
-    } finally {
-      setLoading(false);
+      setError(e.message || 'Failed to update item');
     }
   };
 
@@ -223,7 +618,7 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
   };
 
 
-  const handleEditFormChange = (field: string, value: any) => {
+  const handleEditFormChange = useCallback((field: string, value: any) => {
     // Format date fields to YYYY-MM-DD for display
     let formattedValue = value;
     if (field.toLowerCase().includes('date') && value) {
@@ -237,9 +632,9 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       }
     }
     setEditForm((prev: any) => ({ ...prev, [field]: formattedValue }));
-  };
+  }, []);
 
-  const handleCreateFormChange = (field: string, value: any) => {
+  const handleCreateFormChange = useCallback((field: string, value: any) => {
     // Format date fields to YYYY-MM-DD for display
     let formattedValue = value;
     if (field.toLowerCase().includes('date') && value) {
@@ -253,7 +648,7 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       }
     }
     setCreateForm((prev: any) => ({ ...prev, [field]: formattedValue }));
-  };
+  }, []);
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,10 +681,33 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
         }
       });
       
+      // Separate attributes and relationships
+      const relationships: any = {};
+      const finalAttributes: any = {};
+      
+      Object.keys(filteredAttributes).forEach(key => {
+        if (Object.values(relationshipFields).includes(key)) {
+          // This is a relationship field
+          const relKey = Object.keys(relationshipFields).find(k => relationshipFields[k] === key);
+          if (relKey && filteredAttributes[key]) {
+            relationships[relKey] = {
+              data: {
+                type: relKey,
+                id: filteredAttributes[key]
+              }
+            };
+          }
+        } else {
+          // This is a regular attribute
+          finalAttributes[key] = filteredAttributes[key];
+        }
+      });
+      
       const payload = {
         data: {
           type: entity,
-          attributes: filteredAttributes,
+          attributes: finalAttributes,
+          ...(Object.keys(relationships).length > 0 && { relationships })
         },
       };
       
@@ -306,7 +724,23 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       const newItem = response.data?.data;
       if (newItem) {
         const attrs = newItem.attributes || {};
+        const relationships = newItem.relationships || {};
+        
         const row: any = { id: newItem.id ?? '', ...attrs };
+        
+        // Process relationships
+        if (relationshipFields && Object.keys(relationshipFields).length > 0) {
+          Object.keys(relationshipFields).forEach(relKey => {
+            const displayField = relationshipFields[relKey];
+            const relData = relationships[relKey]?.data;
+            if (relData) {
+              row[displayField] = relData.id;
+            } else {
+              row[displayField] = null;
+            }
+          });
+        }
+        
         setRows((prev) => [row, ...prev]);
         setTotal((prev) => prev + 1);
       }
@@ -357,11 +791,34 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
           // For single select, keep as string (no conversion needed)
         }
       });
+      // Separate attributes and relationships
+      const relationships: any = {};
+      const finalAttributes: any = {};
+      
+      Object.keys(filteredAttributes).forEach(key => {
+        if (Object.values(relationshipFields).includes(key)) {
+          // This is a relationship field
+          const relKey = Object.keys(relationshipFields).find(k => relationshipFields[k] === key);
+          if (relKey && filteredAttributes[key]) {
+            relationships[relKey] = {
+              data: {
+                type: relKey,
+                id: filteredAttributes[key]
+              }
+            };
+          }
+        } else {
+          // This is a regular attribute
+          finalAttributes[key] = filteredAttributes[key];
+        }
+      });
+      
       const payload = {
         data: {
           type: entity,
           id: editRow.id,
-          attributes: filteredAttributes,
+          attributes: finalAttributes,
+          ...(Object.keys(relationships).length > 0 && { relationships })
         },
       };
       await axios.patch(url, payload, {
@@ -400,6 +857,47 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
             } catch (e) {
               // If date parsing fails, keep original value
             }
+          }
+          
+          // Enhanced relationship field display
+          if (relationshipFields && Object.keys(relationshipFields).length > 0 && Object.values(relationshipFields).includes(f)) {
+            if (value) {
+              // Find the relationship key for this field using memoized lookup
+              const relKey = relationshipFieldLookup[f];
+              const lookupData = relKey ? relationshipLookupData[relKey] : null;
+              const relItem = lookupData ? lookupData[value] : null;
+              const displayName = relItem ? relItem.label : `ID: ${value}`;
+              
+
+              
+              return (
+                <div style={{ wordBreak: 'break-word', maxWidth: 320, whiteSpace: 'pre-wrap' }}>
+                  {displayName}
+                </div>
+              );
+            } else {
+              return (
+                <div style={{ wordBreak: 'break-word', maxWidth: 320, whiteSpace: 'pre-wrap' }}>
+                  -
+                </div>
+              );
+            }
+          }
+          
+          // Deleted status indicator (clickable)
+          if (f === 'deleted') {
+            return (
+              <button
+                onClick={() => handleToggleDeleted(info.row.original)}
+                className="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                title={value ? 'Click to activate' : 'Click to deactivate'}
+              >
+                <div className={`w-2 h-2 rounded-full ${value ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                <span className={`text-xs font-medium ${value ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                  {value ? 'Deactivated' : 'Active'}
+                </span>
+              </button>
+            );
           }
           
           // Enhanced JSON field display
@@ -472,17 +970,13 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                 <Pencil className="w-4 h-4" />
               </Button>
             )}
-            {enableDelete && (
-              <Button size="icon" variant="ghost" aria-label="Delete" onClick={() => handleDelete(row.original)}>
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            )}
+
           </div>
         ),
         meta: { headerClassName: '' },
       } : undefined,
     ].filter(Boolean) as ColumnDef<any, any>[]
-  ), [fields, enableEdit, enableDelete]);
+  ), [fields, enableEdit, enableDelete, relationshipFields, relationshipLookupData, handleEdit, handleToggleDeleted]);
 
   const table = useReactTable({
     columns,
@@ -514,15 +1008,39 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
       <CardToolbar>
         {enableCreate && (
           <Button 
-            onClick={() => {
-              setCreateForm(createDefaults);
+            onClick={async () => {
+              setModalLoading(true);
+              
+              // Initialize create form with defaults and empty relationship fields
+              const initialForm = { ...createDefaults };
+              if (relationshipFields) {
+                Object.values(relationshipFields).forEach(field => {
+                  initialForm[field] = '';
+                });
+              }
+              setCreateForm(initialForm);
               setCreateError(null);
+              
+              // Small delay to show loading state and improve perceived performance
+              await new Promise(resolve => setTimeout(resolve, 50));
+              
               setShowCreateDialog(true);
+              setModalLoading(false);
             }}
             className="flex items-center gap-2"
+            disabled={modalLoading}
           >
-            <Plus className="h-4 w-4" />
-            Create {entity.charAt(0).toUpperCase() + entity.slice(1)}
+            {modalLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                Opening...
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                Create {entity.charAt(0).toUpperCase() + entity.slice(1)}
+              </>
+            )}
           </Button>
         )}
         <DataGridColumnVisibility
@@ -557,32 +1075,171 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
         <Card>
           <CardHeader>
             <CardHeading>
-              <div className="flex items-center gap-2.5">
-                <div className="relative">
-                  <Search className="size-4 text-muted-foreground absolute start-3 top-1/2 -translate-y-1/2" />
-                  <Input
-                    placeholder={`Search ${entity.charAt(0).toUpperCase() + entity.slice(1)}s...`}
-                    value={pendingSearchQuery}
-                    onChange={(e) => setPendingSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSearch();
-                      }
-                    }}
-                    className="ps-9 w-160"
-                  />
-                  {pendingSearchQuery.length > 0 && (
-                    <Button
-                      mode="icon"
-                      variant="ghost"
-                      className="absolute end-1.5 top-1/2 -translate-y-1/2 h-6 w-6"
-                      onClick={() => {
-                        setPendingSearchQuery('');
-                        setTableState(prev => ({ ...prev, pageIndex: 0, searchQuery: '' }));
+              <div className="space-y-4">
+                {/* Search Bar */}
+                <div className="flex items-center gap-4">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="size-4 text-muted-foreground absolute start-3 top-1/2 -translate-y-1/2" />
+                    <Input
+                      placeholder={`Search ${entity.charAt(0).toUpperCase() + entity.slice(1)}s...`}
+                      value={pendingSearchQuery}
+                      onChange={(e) => setPendingSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleSearch();
+                        }
                       }}
-                    >
-                      <X />
-                    </Button>
+                      className="ps-9"
+                    />
+                    {pendingSearchQuery.length > 0 && (
+                      <Button
+                        mode="icon"
+                        variant="ghost"
+                        className="absolute end-1.5 top-1/2 -translate-y-1/2 h-6 w-6"
+                        onClick={() => {
+                          setPendingSearchQuery('');
+                          setTableState(prev => ({ ...prev, pageIndex: 0, searchQuery: '' }));
+                        }}
+                      >
+                        <X />
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Filters Section */}
+                  {customFilters.length > 0 && (
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium text-muted-foreground">Filters:</span>
+                      </div>
+                      
+                      <Select value={selectedCustomFilter} onValueChange={setSelectedCustomFilter}>
+                        <SelectTrigger className="w-48">
+                          <SelectValue placeholder="Filter by..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Records</SelectItem>
+                          {customFilters.map((filter) => (
+                            <SelectItem key={filter.key} value={filter.key}>
+                              {filter.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      
+                      {/* Dynamic Filter Dropdown */}
+                      {selectedCustomFilter !== 'all' && customFilters.find(f => f.key === selectedCustomFilter)?.type === 'dynamic' && (
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const filter = customFilters.find(f => f.key === selectedCustomFilter);
+                            if (!filter || !filter.apiEndpoint) return null;
+                            
+                            const options = customFiltersData[selectedCustomFilter] || [];
+                            const isLoading = customFiltersLoading[selectedCustomFilter] || false;
+                            const hasError = customFiltersError[selectedCustomFilter] || false;
+                            const currentValue = dynamicFilterValues[selectedCustomFilter] || '';
+                            
+                            console.log('Dynamic filter dropdown state:', {
+                              filterKey: selectedCustomFilter,
+                              options: options.length,
+                              isLoading,
+                              hasError,
+                              currentValue
+                            });
+                            
+                            // Find the current label with source
+                            const currentOption = options.find((option: any) => 
+                              option[filter.valueField || 'id'] === currentValue
+                            );
+                            let currentLabel = '';
+                            if (currentOption) {
+                              const name = currentOption[filter.labelField || 'name'];
+                              const source = currentOption.source;
+                              currentLabel = source ? `${name} (${source})` : name;
+                            }
+                            
+                            if (isLoading) {
+                              return (
+                                <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted rounded-md">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                                  Loading...
+                                </div>
+                              );
+                            }
+                            
+                            if (hasError) {
+                              return (
+                                <div className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 rounded-md">
+                                  Error loading options
+                                </div>
+                              );
+                            }
+                            
+                            return (
+                              <Popover 
+                                open={openDropdowns[`dynamic-filter-${selectedCustomFilter}`]} 
+                                onOpenChange={(open) => setOpenDropdowns(prev => ({ ...prev, [`dynamic-filter-${selectedCustomFilter}`]: open }))}
+                              >
+                                <PopoverTrigger asChild>
+                                                                  <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  aria-expanded={openDropdowns[`dynamic-filter-${selectedCustomFilter}`]}
+                                  className="w-48 justify-between text-sm font-normal"
+                                >
+                                  <span className="truncate">
+                                    {currentLabel || "Select..."}
+                                  </span>
+                                  <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-48 p-0" align="start">
+                                  <Command>
+                                    <CommandInput placeholder="Search..." />
+                                    <CommandList>
+                                      <CommandEmpty>No options found.</CommandEmpty>
+                                      <CommandGroup>
+                                                                              {options.map((option: any) => {
+                                        const value = option[filter.valueField || 'id'];
+                                        const name = option[filter.labelField || 'name'];
+                                        const source = option.source;
+                                        const label = source ? `${name} (${source})` : name;
+                                        return (
+                                          <CommandItem
+                                            key={value}
+                                            value={label}
+                                            onSelect={() => {
+                                              setDynamicFilterValues(prev => ({ ...prev, [selectedCustomFilter]: value }));
+                                              setOpenDropdowns(prev => ({ ...prev, [`dynamic-filter-${selectedCustomFilter}`]: false }));
+                                              // Trigger search after selection
+                                              setTimeout(() => {
+                                                setTableState(prev => ({ ...prev }));
+                                              }, 100);
+                                            }}
+                                            className="whitespace-normal"
+                                          >
+                                            <Check
+                                              className={`mr-2 h-4 w-4 flex-shrink-0 ${
+                                                currentValue === value ? "opacity-100" : "opacity-0"
+                                              }`}
+                                            />
+                                            <span className="break-words">{label}</span>
+                                          </CommandItem>
+                                        );
+                                      })}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                            );
+                          })()}
+                        </div>
+                      )}
+                      
+
+                    </div>
                   )}
                 </div>
               </div>
@@ -602,31 +1259,55 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
           </CardFooter>
         </Card>
         {error && (
-          <Alert variant="destructive" appearance="light" onClose={() => setError(null)} className="mb-4">
-            <AlertIcon />
-            <AlertTitle>{error}</AlertTitle>
-          </Alert>
+          <div className="mt-4 mb-4">
+            <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/20 border border-red-200 dark:border-red-800 rounded-lg shadow-md">
+              <div className="flex items-center gap-3 p-4">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center">
+                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-base font-semibold text-red-800 dark:text-red-200">
+                      Data Loading Error
+                    </h4>
+                    <button
+                      onClick={() => setError(null)}
+                      className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 transition-colors p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-950/30"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed mb-3">
+                    {error}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setError(null);
+                        // Trigger a re-fetch
+                        setTableState(prev => ({ ...prev }));
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white text-xs font-medium rounded-md transition-colors shadow-sm hover:shadow-md"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Retry
+                    </button>
+                    <button
+                      onClick={() => setError(null)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-red-600 dark:text-red-400 text-xs font-medium rounded-md border border-red-200 dark:border-red-700 transition-colors"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </DataGrid>
-      {/* Delete confirmation dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Item</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this item? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowDeleteDialog(false)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} autoFocus variant="destructive">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
       {/* Edit dialog */}
       <Dialog open={!!editRow} onOpenChange={v => { if (!v) setEditRow(null); }}>
         <DialogContent className="max-w-3xl p-0 overflow-hidden">
@@ -662,12 +1343,36 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
-                      Update Failed
-                    </h4>
-                    <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-red-800 dark:text-red-200">
+                        Update Failed
+                      </h4>
+                      <button
+                        onClick={() => setEditError(null)}
+                        className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 transition-colors p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-950/30"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed mb-3">
                       {editError}
                     </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditError(null)}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white text-xs font-medium rounded-md transition-colors shadow-sm hover:shadow-md"
+                      >
+                        Try Again
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditError(null)}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-red-600 dark:text-red-400 text-xs font-medium rounded-md border border-red-200 dark:border-red-700 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -698,6 +1403,11 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                     <label className="text-sm font-semibold text-foreground" htmlFor={`edit-${f}`}>
                       {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
                     </label>
+                    {Object.values(relationshipFields).includes(f) && (
+                      <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-3 py-1 rounded-full font-medium">
+                        {Object.keys(relationshipFields).find(k => relationshipFields[k] === f) || 'Related'}
+                      </span>
+                    )}
                     {(f.toLowerCase().includes('json') || f.toLowerCase().includes('data') || f.toLowerCase().includes('config') || f.toLowerCase().includes('metadata') || f.toLowerCase().includes('settings')) && (
                       <span className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-3 py-1 rounded-full font-medium">
                         {f.toLowerCase().includes('json') ? 'JSON' : 
@@ -711,51 +1421,94 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                   {predefinedFields[f] ? (
                     <div className="space-y-3">
                       {(() => {
+                        const { options, isLoading, hasError } = getPredefinedFieldOptions(f);
                         const fieldConfig = predefinedFields[f];
                         const isMultiSelect = Array.isArray(fieldConfig);
-                        const options = isMultiSelect ? fieldConfig : (fieldConfig as any).options;
                         const isSingleSelect = !isMultiSelect && (fieldConfig as any).type === 'single';
                         
+                        // Fetch options if not loaded, not loading, and no error
+                        if ('apiEndpoint' in fieldConfig && !options.length && !isLoading && !hasError) {
+                          fetchPredefinedFieldOptions(f);
+                        }
+                        
+                        if (isLoading) {
+                          return (
+                            <div className="flex items-center justify-center p-4">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                              <span className="ml-2 text-sm text-muted-foreground">Loading options...</span>
+                            </div>
+                          );
+                        }
+                        
+                        if (hasError) {
+                          return (
+                            <div className="p-4 text-sm text-center space-y-2">
+                              <div className="text-red-600">Failed to load options</div>
+                              <button
+                                onClick={() => {
+                                  setPredefinedFieldsError(prev => ({ ...prev, [f]: false }));
+                                  fetchPredefinedFieldOptions(f);
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          );
+                        }
+                        
                         if (isSingleSelect) {
-                          // Single select implementation
+                          // Single select dropdown implementation
                           const currentValue = editForm[f] || '';
                           return (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {options.map((value: string) => (
-                                <div key={value} className={`flex items-center space-x-3 p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
-                                  currentValue === value
-                                    ? 'border-primary bg-primary/5 text-primary' 
-                                    : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                                }`}>
-                                  <div className="relative">
-                                    <input
-                                      type="radio"
-                                      name={f}
-                                      id={`${f}-${value}`}
-                                      value={value}
-                                      checked={currentValue === value}
-                                      onChange={(e) => handleEditFormChange(f, e.target.value)}
-                                      disabled={editLoading}
-                                      className="peer sr-only"
-                                    />
-                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
-                                      currentValue === value
-                                        ? 'bg-primary border-primary' 
-                                        : 'border-gray-300 hover:border-primary/50'
-                                    } ${editLoading ? 'opacity-50' : ''}`}>
-                                      {currentValue === value && (
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <label htmlFor={`${f}-${value}`} className="text-sm font-medium cursor-pointer flex-1">
-                                    {value}
-                                  </label>
-                                  {currentValue === value && (
-                                    <Check className="h-4 w-4 text-primary" />
-                                  )}
-                                </div>
-                              ))}
+                            <div className="space-y-2">
+                              <Popover 
+                                open={openDropdowns[`edit-predefined-${f}`]} 
+                                onOpenChange={(open) => setOpenDropdowns(prev => ({ ...prev, [`edit-predefined-${f}`]: open }))}
+                              >
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={openDropdowns[`edit-predefined-${f}`]}
+                                    className="h-11 w-full justify-between text-base"
+                                    disabled={editLoading || isLoading}
+                                  >
+                                    {isLoading ? "Loading..." : 
+                                     currentValue ? 
+                                       currentValue : 
+                                       `Select ${f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}`}
+                                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-full p-0" align="start">
+                                  <Command>
+                                    <CommandInput placeholder={`Search ${f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}...`} />
+                                    <CommandList>
+                                      <CommandEmpty>No {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')} found.</CommandEmpty>
+                                      <CommandGroup>
+                                        {options.map((value: string) => (
+                                          <CommandItem
+                                            key={value}
+                                            value={value}
+                                            onSelect={() => {
+                                              handleEditFormChange(f, value);
+                                              setOpenDropdowns(prev => ({ ...prev, [`edit-predefined-${f}`]: false }));
+                                            }}
+                                          >
+                                            <Check
+                                              className={`mr-2 h-4 w-4 ${
+                                                currentValue === value ? "opacity-100" : "opacity-0"
+                                              }`}
+                                            />
+                                            {value}
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
                             </div>
                           );
                         } else {
@@ -814,6 +1567,125 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                         }
                       })()}
                     </div>
+                                     ) : Object.values(relationshipFields).includes(f) ? (
+                     <div className="space-y-2">
+                       {(() => {
+                         const relationshipKey = Object.keys(relationshipFields).find(k => relationshipFields[k] === f);
+                         const config = relationshipKey ? relationshipOptions[relationshipKey] : null;
+                         const options = relationshipKey ? relationshipOptionsData[relationshipKey] || [] : [];
+                         const isLoading = relationshipKey ? relationshipOptionsLoading[relationshipKey] || false : false;
+                         const hasError = relationshipKey ? relationshipOptionsError[relationshipKey] || false : false;
+                         
+                         // Fetch options if not loaded, not loading, and no error
+                         if (relationshipKey && !options.length && !isLoading && !hasError && config) {
+                           fetchRelationshipOptions(relationshipKey);
+                         }
+
+                         const getOptionLabel = (item: any) => {
+                           if (!config) return item.id;
+                           const labelField = config.labelField || 'name';
+                           const label = item[labelField] || item.name || item.id;
+                           const source = item.source;
+                           
+                           // For workflow lookups, include source in parentheses if available
+                           if (relationshipKey === 'workflow' && source) {
+                             return `${label} (${source})`;
+                           }
+                           
+                           return label;
+                         };
+
+                         const getOptionValue = (item: any) => {
+                           if (!config) return item.id;
+                           const valueField = config.valueField || 'id';
+                           return item[valueField] || item.id;
+                         };
+
+                         return (
+                           <div className="space-y-2">
+                             <Popover 
+                               open={openDropdowns[`edit-${f}`]} 
+                               onOpenChange={(open) => setOpenDropdowns(prev => ({ ...prev, [`edit-${f}`]: open }))}
+                             >
+                               <PopoverTrigger asChild>
+                                 <Button
+                                   variant="outline"
+                                   role="combobox"
+                                   aria-expanded={openDropdowns[`edit-${f}`]}
+                                   className="h-11 w-full justify-between text-base"
+                                   disabled={editLoading || isLoading}
+                                 >
+                                   {isLoading ? "Loading..." : 
+                                    editForm[f] ? 
+                                      options.find(item => getOptionValue(item) === editForm[f]) ? 
+                                        getOptionLabel(options.find(item => getOptionValue(item) === editForm[f])) : 
+                                        `ID: ${editForm[f]}` : 
+                                      `Select ${relationshipKey || 'Related'}`}
+                                   <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                 </Button>
+                               </PopoverTrigger>
+                               <PopoverContent className="w-full p-0" align="start">
+                                 <Command>
+                                   <CommandInput placeholder={`Search ${relationshipKey || 'related entity'}...`} />
+                                   <CommandList>
+                                     <CommandEmpty>No {relationshipKey || 'related entity'} found.</CommandEmpty>
+                                     <CommandGroup>
+                                       {isLoading ? (
+                                         <div className="flex items-center justify-center p-4">
+                                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                                           <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+                                         </div>
+                                       ) : hasError ? (
+                                         <div className="p-4 text-sm text-center space-y-2">
+                                           <div className="text-red-600">Failed to load options</div>
+                                           <button
+                                             onClick={() => {
+                                               if (relationshipKey) {
+                                                 setRelationshipOptionsError(prev => ({ ...prev, [relationshipKey]: false }));
+                                                 fetchRelationshipOptions(relationshipKey);
+                                               }
+                                             }}
+                                             className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                           >
+                                             Retry
+                                           </button>
+                                         </div>
+                                       ) : options.length > 0 ? (
+                                         options.map((item) => (
+                                           <CommandItem
+                                             key={getOptionValue(item)}
+                                             value={getOptionLabel(item)}
+                                             onSelect={() => {
+                                               handleEditFormChange(f, getOptionValue(item));
+                                               setOpenDropdowns(prev => ({ ...prev, [`edit-${f}`]: false }));
+                                             }}
+                                           >
+                                             <Check
+                                               className={`mr-2 h-4 w-4 ${
+                                                 editForm[f] === getOptionValue(item) ? "opacity-100" : "opacity-0"
+                                               }`}
+                                             />
+                                             {getOptionLabel(item)}
+                                           </CommandItem>
+                                         ))
+                                       ) : (
+                                         <div className="p-4 text-sm text-muted-foreground text-center">
+                                           No options available
+                                         </div>
+                                       )}
+                                     </CommandGroup>
+                                   </CommandList>
+                                 </Command>
+                               </PopoverContent>
+                             </Popover>
+                             <div className="text-xs text-muted-foreground flex items-center gap-2">
+                               <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                               <span>Select a {relationshipKey || 'related entity'}</span>
+                             </div>
+                           </div>
+                         );
+                       })()}
+                     </div>
                   ) : (
                     f.toLowerCase().includes('date') ? (
                       <Input
@@ -929,7 +1801,7 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                         onChange={e => handleEditFormChange(f, e.target.value)}
                         disabled={editLoading}
                         className="h-11 text-base"
-                        placeholder={`Enter ${f.charAt(0).toLowerCase() + f.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase()}`}
+                        placeholder={`Enter ${f.charAt(0).toLowerCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}`}
                       />
                     )
                   )}
@@ -1005,12 +1877,36 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
-                      Creation Failed
-                    </h4>
-                    <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-red-800 dark:text-red-200">
+                        Creation Failed
+                      </h4>
+                      <button
+                        onClick={() => setCreateError(null)}
+                        className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 transition-colors p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-950/30"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed mb-3">
                       {createError}
                     </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCreateError(null)}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white text-xs font-medium rounded-md transition-colors shadow-sm hover:shadow-md"
+                      >
+                        Try Again
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCreateError(null)}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-red-600 dark:text-red-400 text-xs font-medium rounded-md border border-red-200 dark:border-red-700 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1026,6 +1922,11 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                       <label className="text-sm font-semibold text-foreground" htmlFor={`create-${f}`}>
                         {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}
                       </label>
+                      {Object.values(relationshipFields).includes(f) && (
+                        <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-3 py-1 rounded-full font-medium">
+                          {Object.keys(relationshipFields).find(k => relationshipFields[k] === f) || 'Related'}
+                        </span>
+                      )}
                       {(f.toLowerCase().includes('json') || f.toLowerCase().includes('data') || f.toLowerCase().includes('config') || f.toLowerCase().includes('metadata') || f.toLowerCase().includes('settings')) && (
                         <span className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-3 py-1 rounded-full font-medium">
                           {f.toLowerCase().includes('json') ? 'JSON' : 
@@ -1039,51 +1940,94 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                     
                     {predefinedFields[f] ? (
                       (() => {
+                        const { options, isLoading, hasError } = getPredefinedFieldOptions(f);
                         const fieldConfig = predefinedFields[f];
                         const isMultiSelect = Array.isArray(fieldConfig);
-                        const options = isMultiSelect ? fieldConfig : (fieldConfig as any).options;
                         const isSingleSelect = !isMultiSelect && (fieldConfig as any).type === 'single';
                         
+                        // Fetch options if not loaded, not loading, and no error
+                        if ('apiEndpoint' in fieldConfig && !options.length && !isLoading && !hasError) {
+                          fetchPredefinedFieldOptions(f);
+                        }
+                        
+                        if (isLoading) {
+                          return (
+                            <div className="flex items-center justify-center p-4">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                              <span className="ml-2 text-sm text-muted-foreground">Loading options...</span>
+                            </div>
+                          );
+                        }
+                        
+                        if (hasError) {
+                          return (
+                            <div className="p-4 text-sm text-center space-y-2">
+                              <div className="text-red-600">Failed to load options</div>
+                              <button
+                                onClick={() => {
+                                  setPredefinedFieldsError(prev => ({ ...prev, [f]: false }));
+                                  fetchPredefinedFieldOptions(f);
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          );
+                        }
+                        
                         if (isSingleSelect) {
-                          // Single select implementation (matching edit modal)
+                          // Single select dropdown implementation (matching edit modal)
                           const currentValue = createForm[f];
                           return (
                             <div className="space-y-2">
-                              {options.map((value: string) => (
-                                <div key={value} className={`flex items-center space-x-3 p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
-                                  currentValue === value 
-                                    ? 'border-primary bg-primary/5 text-primary' 
-                                    : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                                }`}>
-                                  <div className="relative">
-                                    <input
-                                      type="radio"
-                                      id={`create-${f}-${value}`}
-                                      name={`create-${f}`}
-                                      value={value}
-                                      checked={currentValue === value}
-                                      onChange={(e) => handleCreateFormChange(f, e.target.value)}
-                                      disabled={createLoading}
-                                      className="peer sr-only"
-                                    />
-                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
-                                      currentValue === value 
-                                        ? 'bg-primary border-primary' 
-                                        : 'border-gray-300 hover:border-primary/50'
-                                    } ${createLoading ? 'opacity-50' : ''}`}>
-                                      {currentValue === value && (
-                                        <div className="w-2 h-2 bg-white rounded-full" />
-                                      )}
-                                    </div>
-                                  </div>
-                                  <label htmlFor={`create-${f}-${value}`} className="text-sm font-medium cursor-pointer flex-1">
-                                    {value}
-                                  </label>
-                                  {currentValue === value && (
-                                    <Check className="h-4 w-4 text-primary" />
-                                  )}
-                                </div>
-                              ))}
+                              <Popover 
+                                open={openDropdowns[`create-predefined-${f}`]} 
+                                onOpenChange={(open) => setOpenDropdowns(prev => ({ ...prev, [`create-predefined-${f}`]: open }))}
+                              >
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={openDropdowns[`create-predefined-${f}`]}
+                                    className="h-11 w-full justify-between text-base"
+                                    disabled={createLoading || isLoading}
+                                  >
+                                    {isLoading ? "Loading..." : 
+                                     currentValue ? 
+                                       currentValue : 
+                                       `Select ${f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}`}
+                                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-full p-0" align="start">
+                                  <Command>
+                                    <CommandInput placeholder={`Search ${f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')}...`} />
+                                    <CommandList>
+                                      <CommandEmpty>No {f.charAt(0).toUpperCase() + f.slice(1).replace(/([A-Z])/g, ' $1')} found.</CommandEmpty>
+                                      <CommandGroup>
+                                        {options.map((value: string) => (
+                                          <CommandItem
+                                            key={value}
+                                            value={value}
+                                            onSelect={() => {
+                                              handleCreateFormChange(f, value);
+                                              setOpenDropdowns(prev => ({ ...prev, [`create-predefined-${f}`]: false }));
+                                            }}
+                                          >
+                                            <Check
+                                              className={`mr-2 h-4 w-4 ${
+                                                currentValue === value ? "opacity-100" : "opacity-0"
+                                              }`}
+                                            />
+                                            {value}
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
                             </div>
                           );
                         } else {
@@ -1141,6 +2085,125 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                           );
                         }
                       })()
+                    ) : Object.values(relationshipFields).includes(f) ? (
+                      <div className="space-y-2">
+                        {(() => {
+                          const relationshipKey = Object.keys(relationshipFields).find(k => relationshipFields[k] === f);
+                          const config = relationshipKey ? relationshipOptions[relationshipKey] : null;
+                          const options = relationshipKey ? relationshipOptionsData[relationshipKey] || [] : [];
+                          const isLoading = relationshipKey ? relationshipOptionsLoading[relationshipKey] || false : false;
+                          const hasError = relationshipKey ? relationshipOptionsError[relationshipKey] || false : false;
+                          
+                          // Fetch options if not loaded, not loading, and no error
+                          if (relationshipKey && !options.length && !isLoading && !hasError && config) {
+                            fetchRelationshipOptions(relationshipKey);
+                          }
+
+                          const getOptionLabel = (item: any) => {
+                            if (!config) return item.id;
+                            const labelField = config.labelField || 'name';
+                            const label = item[labelField] || item.name || item.id;
+                            const source = item.source;
+                            
+                            // For workflow lookups, include source in parentheses if available
+                            if (relationshipKey === 'workflow' && source) {
+                              return `${label} (${source})`;
+                            }
+                            
+                            return label;
+                          };
+
+                          const getOptionValue = (item: any) => {
+                            if (!config) return item.id;
+                            const valueField = config.valueField || 'id';
+                            return item[valueField] || item.id;
+                          };
+
+                          return (
+                            <div className="space-y-2">
+                              <Popover 
+                                open={openDropdowns[`create-${f}`]} 
+                                onOpenChange={(open) => setOpenDropdowns(prev => ({ ...prev, [`create-${f}`]: open }))}
+                              >
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={openDropdowns[`create-${f}`]}
+                                    className="h-11 w-full justify-between text-base"
+                                    disabled={createLoading || isLoading}
+                                  >
+                                    {isLoading ? "Loading..." : 
+                                     createForm[f] ? 
+                                       options.find(item => getOptionValue(item) === createForm[f]) ? 
+                                         getOptionLabel(options.find(item => getOptionValue(item) === createForm[f])) : 
+                                         `ID: ${createForm[f]}` : 
+                                       `Select ${relationshipKey || 'Related'}`}
+                                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-full p-0" align="start">
+                                  <Command>
+                                    <CommandInput placeholder={`Search ${relationshipKey || 'related entity'}...`} />
+                                    <CommandList>
+                                      <CommandEmpty>No {relationshipKey || 'related entity'} found.</CommandEmpty>
+                                      <CommandGroup>
+                                        {isLoading ? (
+                                          <div className="flex items-center justify-center p-4">
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                                            <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+                                          </div>
+                                        ) : hasError ? (
+                                          <div className="p-4 text-sm text-center space-y-2">
+                                            <div className="text-red-600">Failed to load options</div>
+                                            <button
+                                              onClick={() => {
+                                                if (relationshipKey) {
+                                                  setRelationshipOptionsError(prev => ({ ...prev, [relationshipKey]: false }));
+                                                  fetchRelationshipOptions(relationshipKey);
+                                                }
+                                              }}
+                                              className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                            >
+                                              Retry
+                                            </button>
+                                          </div>
+                                        ) : options.length > 0 ? (
+                                          options.map((item) => (
+                                            <CommandItem
+                                              key={getOptionValue(item)}
+                                              value={getOptionLabel(item)}
+                                              onSelect={() => {
+                                                handleCreateFormChange(f, getOptionValue(item));
+                                                setOpenDropdowns(prev => ({ ...prev, [`create-${f}`]: false }));
+                                              }}
+                                            >
+                                              <Check
+                                                className={`mr-2 h-4 w-4 ${
+                                                  createForm[f] === getOptionValue(item) ? "opacity-100" : "opacity-0"
+                                                }`}
+                                              />
+                                              {getOptionLabel(item)}
+                                            </CommandItem>
+                                          ))
+                                        ) : (
+                                          <div className="p-4 text-sm text-muted-foreground text-center">
+                                            No options available
+                                          </div>
+                                        )}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                              <div className="text-xs text-muted-foreground flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                <span>Select a {relationshipKey || 'related entity'}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     ) : (f.toLowerCase().includes('date')) ? (
                       <Input
                         id={`create-${f}`}

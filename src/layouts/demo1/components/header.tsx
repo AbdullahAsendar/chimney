@@ -34,6 +34,7 @@ import { MegaMenuMobile } from './mega-menu-mobile';
 import { SidebarMenu } from './sidebar-menu';
 import { useAuth } from '@/auth/context/auth-context';
 import { MENU_SIDEBAR } from '@/config/menu.config';
+import { EnvironmentToggle } from '@/components/common/environment-toggle';
 
 export function Header() {
   const [isSidebarSheetOpen, setIsSidebarSheetOpen] = useState(false);
@@ -180,6 +181,7 @@ function TopbarUserSection() {
                   </Button>
                 }
               />
+              <EnvironmentToggle />
               <UserDropdownMenu
                 trigger={
           <div

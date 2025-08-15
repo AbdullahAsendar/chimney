@@ -1,9 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+type Environment = 'local' | 'dev' | 'stg' | 'prod';
+
 interface EnvironmentContextType {
-  isProduction: boolean;
+  environment: Environment;
   apiBaseUrl: string;
   toggleEnvironment: () => void;
+  setEnvironment: (env: Environment) => void;
 }
 
 const EnvironmentContext = createContext<EnvironmentContextType | undefined>(undefined);
@@ -20,26 +23,42 @@ interface EnvironmentProviderProps {
   children: React.ReactNode;
 }
 
+const ENVIRONMENT_URLS: Record<Environment, string> = {
+  local: 'http://localhost:8080',
+  dev: 'https://dev-api-realestate-ds.sharjah.ae',
+  stg: 'https://stg-api-aqari.ds.sharjah.ae',
+  prod: 'https://api-aqari.ds.sharjah.ae',
+};
+
 export const EnvironmentProvider: React.FC<EnvironmentProviderProps> = ({ children }) => {
-  const [isProduction, setIsProduction] = useState(() => {
+  const [environment, setEnvironmentState] = useState<Environment>(() => {
     const saved = localStorage.getItem('environment');
-    return saved === 'production';
+    return (saved as Environment) || 'stg';
   });
 
-  const apiBaseUrl = 'https://stg-api-aqari.ds.sharjah.ae';
+  const apiBaseUrl = ENVIRONMENT_URLS[environment];
+
+  const setEnvironment = (env: Environment) => {
+    setEnvironmentState(env);
+    localStorage.setItem('environment', env);
+  };
 
   const toggleEnvironment = () => {
-    setIsProduction(prev => !prev);
+    const environments: Environment[] = ['local', 'dev', 'stg', 'prod'];
+    const currentIndex = environments.indexOf(environment);
+    const nextIndex = (currentIndex + 1) % environments.length;
+    setEnvironment(environments[nextIndex]);
   };
 
   useEffect(() => {
-    localStorage.setItem('environment', isProduction ? 'production' : 'staging');
-  }, [isProduction]);
+    localStorage.setItem('environment', environment);
+  }, [environment]);
 
   const value = {
-    isProduction,
+    environment,
     apiBaseUrl,
     toggleEnvironment,
+    setEnvironment,
   };
 
   return (

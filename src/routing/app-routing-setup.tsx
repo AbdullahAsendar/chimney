@@ -3,6 +3,7 @@ import { Demo1Layout } from '@/layouts/demo1/layout';
 import { Navigate, Route, Routes } from 'react-router';
 import CustomersPage from '@/pages/customers/CustomersPage';
 import ApplicationsPage from '@/pages/applications/ApplicationsPage';
+import ValidationsPage from '@/pages/validations/ValidationsPage';
 import WorkerTasksPage from '@/pages/worker-tasks/WorkerTasksPage';
 import PropertyBlocksPage from '@/pages/property-blocks/PropertyBlocksPage';
 import CustomerBlocksPage from '@/pages/customer-blocks/CustomerBlocksPage';
@@ -23,6 +24,7 @@ export function AppRoutingSetup() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/applications" element={<ApplicationsPage />} />
+          <Route path="/validations" element={<ValidationsPage />} />
           <Route path="/worker-tasks" element={<WorkerTasksPage />} />
           <Route path="/property-blocks" element={<PropertyBlocksPage />} />
           <Route path="/customer-blocks" element={<CustomerBlocksPage />} />

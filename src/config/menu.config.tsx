@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Shield,
   UserX,
+  CheckCircle,
 } from 'lucide-react';
 import { type MenuConfig } from './types';
 
@@ -29,6 +30,7 @@ export const MENU_SIDEBAR: MenuConfig = [
     icon: Briefcase,
     path: '/applications',
   },
+
   {
     title: 'Worker Tasks',
     icon: Kanban,
@@ -53,8 +55,7 @@ export const MENU_SIDEBAR: MenuConfig = [
   {
     title: 'Prevalidations',
     icon: Inspect,
-    disabled: true,
-    path: '/worker-tasks',
+    path: '/validations',
   },
   { heading: 'utils' },
   {
