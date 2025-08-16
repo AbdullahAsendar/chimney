@@ -63,20 +63,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (isInitializing.current) return;
       isInitializing.current = true;
       
-      console.log('AuthProvider: Initializing authentication...');
+
       
       try {
         // Always try to use refresh token on app load
         const refreshToken = AuthAdapter.getCachedRefreshToken();
         
         if (refreshToken) {
-          console.log('AuthProvider: Found refresh token, attempting to authenticate...');
           
           try {
             // Use refresh token to get fresh auth token and user data
             const { auth: newAuth, user: newUser } = await AuthAdapter.loginWithRefreshToken(refreshToken);
             
-            console.log('AuthProvider: Successfully authenticated with refresh token');
+
             
             // Set auth and user data
             saveAuth(newAuth);
@@ -87,7 +86,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
             await new Promise(resolve => setTimeout(resolve, 50));
             
           } catch (refreshError) {
-            console.error('AuthProvider: Failed to authenticate with refresh token:', refreshError);
             
             // Clear everything on refresh failure
             AuthAdapter.logout();
@@ -97,7 +95,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
             clearUserCache();
           }
         } else {
-          console.log('AuthProvider: No refresh token found, user needs to login');
           
           // No refresh token, clear any cached data
           AuthAdapter.logout();
@@ -107,7 +104,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
           clearUserCache();
         }
       } catch (error) {
-        console.error('AuthProvider: Authentication initialization error:', error);
         
         // Clear everything on any error
         AuthAdapter.logout();
@@ -126,7 +122,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []); // Only run once on mount
 
   const verify = async () => {
-    console.log('AuthProvider: verify() called - this should not be used in new flow');
     // This function is kept for compatibility but should not be used
     // The new flow always uses refresh token on app load
   };

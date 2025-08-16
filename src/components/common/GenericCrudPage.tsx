@@ -1108,137 +1108,157 @@ export const GenericCrudPage: React.FC<GenericCrudPageProps> = ({
                   
                   {/* Filters Section */}
                   {customFilters.length > 0 && (
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <Filter className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium text-muted-foreground">Filters:</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <Filter className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium text-muted-foreground">Filters:</span>
+                        </div>
+                        
+                        <Select value={selectedCustomFilter} onValueChange={setSelectedCustomFilter}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Filter by..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Records</SelectItem>
+                            {customFilters.map((filter) => (
+                              <SelectItem key={filter.key} value={filter.key}>
+                                {filter.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        
+                        {/* Dynamic Filter Dropdown */}
+                        {selectedCustomFilter !== 'all' && customFilters.find(f => f.key === selectedCustomFilter)?.type === 'dynamic' && (
+                          <div className="flex items-center gap-2">
+                            {(() => {
+                              const filter = customFilters.find(f => f.key === selectedCustomFilter);
+                              if (!filter || !filter.apiEndpoint) return null;
+                              
+                              const options = customFiltersData[selectedCustomFilter] || [];
+                              const isLoading = customFiltersLoading[selectedCustomFilter] || false;
+                              const hasError = customFiltersError[selectedCustomFilter] || false;
+                              const currentValue = dynamicFilterValues[selectedCustomFilter] || '';
+                              
+                              console.log('Dynamic filter dropdown state:', {
+                                filterKey: selectedCustomFilter,
+                                options: options.length,
+                                isLoading,
+                                hasError,
+                                currentValue
+                              });
+                              
+                              // Find the current label with source
+                              const currentOption = options.find((option: any) => 
+                                option[filter.valueField || 'id'] === currentValue
+                              );
+                              let currentLabel = '';
+                              if (currentOption) {
+                                const name = currentOption[filter.labelField || 'name'];
+                                const source = currentOption.source;
+                                currentLabel = source ? `${name} (${source})` : name;
+                              }
+                              
+                              if (isLoading) {
+                                return (
+                                  <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted rounded-md">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                                    Loading...
+                                  </div>
+                                );
+                              }
+                              
+                              if (hasError) {
+                                return (
+                                  <div className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 rounded-md">
+                                    Error loading options
+                                  </div>
+                                );
+                              }
+                              
+                              return (
+                                <Popover 
+                                  open={openDropdowns[`dynamic-filter-${selectedCustomFilter}`]} 
+                                  onOpenChange={(open) => setOpenDropdowns(prev => ({ ...prev, [`dynamic-filter-${selectedCustomFilter}`]: open }))}
+                                >
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      role="combobox"
+                                      aria-expanded={openDropdowns[`dynamic-filter-${selectedCustomFilter}`]}
+                                      className="w-48 justify-between text-sm font-normal"
+                                    >
+                                      <span className="truncate">
+                                        {currentLabel || "Select..."}
+                                      </span>
+                                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-48 p-0" align="start">
+                                    <Command>
+                                      <CommandInput placeholder="Search..." />
+                                      <CommandList>
+                                        <CommandEmpty>No options found.</CommandEmpty>
+                                        <CommandGroup>
+                                          {options.map((option: any) => {
+                                            const value = option[filter.valueField || 'id'];
+                                            const name = option[filter.labelField || 'name'];
+                                            const source = option.source;
+                                            const label = source ? `${name} (${source})` : name;
+                                            return (
+                                              <CommandItem
+                                                key={value}
+                                                value={label}
+                                                onSelect={() => {
+                                                  setDynamicFilterValues(prev => ({ ...prev, [selectedCustomFilter]: value }));
+                                                  setOpenDropdowns(prev => ({ ...prev, [`dynamic-filter-${selectedCustomFilter}`]: false }));
+                                                  // Trigger search after selection
+                                                  setTimeout(() => {
+                                                    setTableState(prev => ({ ...prev }));
+                                                  }, 100);
+                                                }}
+                                                className="whitespace-normal"
+                                              >
+                                                <Check
+                                                  className={`mr-2 h-4 w-4 flex-shrink-0 ${
+                                                    currentValue === value ? "opacity-100" : "opacity-0"
+                                                  }`}
+                                                />
+                                                <span className="break-words">{label}</span>
+                                              </CommandItem>
+                                            );
+                                          })}
+                                        </CommandGroup>
+                                      </CommandList>
+                                    </Command>
+                                  </PopoverContent>
+                                </Popover>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
                       
-                      <Select value={selectedCustomFilter} onValueChange={setSelectedCustomFilter}>
-                        <SelectTrigger className="w-48">
-                          <SelectValue placeholder="Filter by..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Records</SelectItem>
-                          {customFilters.map((filter) => (
-                            <SelectItem key={filter.key} value={filter.key}>
-                              {filter.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      
-                      {/* Dynamic Filter Dropdown */}
-                      {selectedCustomFilter !== 'all' && customFilters.find(f => f.key === selectedCustomFilter)?.type === 'dynamic' && (
-                        <div className="flex items-center gap-2">
-                          {(() => {
-                            const filter = customFilters.find(f => f.key === selectedCustomFilter);
-                            if (!filter || !filter.apiEndpoint) return null;
-                            
-                            const options = customFiltersData[selectedCustomFilter] || [];
-                            const isLoading = customFiltersLoading[selectedCustomFilter] || false;
-                            const hasError = customFiltersError[selectedCustomFilter] || false;
-                            const currentValue = dynamicFilterValues[selectedCustomFilter] || '';
-                            
-                            console.log('Dynamic filter dropdown state:', {
-                              filterKey: selectedCustomFilter,
-                              options: options.length,
-                              isLoading,
-                              hasError,
-                              currentValue
-                            });
-                            
-                            // Find the current label with source
-                            const currentOption = options.find((option: any) => 
-                              option[filter.valueField || 'id'] === currentValue
-                            );
-                            let currentLabel = '';
-                            if (currentOption) {
-                              const name = currentOption[filter.labelField || 'name'];
-                              const source = currentOption.source;
-                              currentLabel = source ? `${name} (${source})` : name;
-                            }
-                            
-                            if (isLoading) {
-                              return (
-                                <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted rounded-md">
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                                  Loading...
-                                </div>
-                              );
-                            }
-                            
-                            if (hasError) {
-                              return (
-                                <div className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 rounded-md">
-                                  Error loading options
-                                </div>
-                              );
-                            }
-                            
-                            return (
-                              <Popover 
-                                open={openDropdowns[`dynamic-filter-${selectedCustomFilter}`]} 
-                                onOpenChange={(open) => setOpenDropdowns(prev => ({ ...prev, [`dynamic-filter-${selectedCustomFilter}`]: open }))}
-                              >
-                                <PopoverTrigger asChild>
-                                                                  <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  aria-expanded={openDropdowns[`dynamic-filter-${selectedCustomFilter}`]}
-                                  className="w-48 justify-between text-sm font-normal"
-                                >
-                                  <span className="truncate">
-                                    {currentLabel || "Select..."}
-                                  </span>
-                                  <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-48 p-0" align="start">
-                                  <Command>
-                                    <CommandInput placeholder="Search..." />
-                                    <CommandList>
-                                      <CommandEmpty>No options found.</CommandEmpty>
-                                      <CommandGroup>
-                                                                              {options.map((option: any) => {
-                                        const value = option[filter.valueField || 'id'];
-                                        const name = option[filter.labelField || 'name'];
-                                        const source = option.source;
-                                        const label = source ? `${name} (${source})` : name;
-                                        return (
-                                          <CommandItem
-                                            key={value}
-                                            value={label}
-                                            onSelect={() => {
-                                              setDynamicFilterValues(prev => ({ ...prev, [selectedCustomFilter]: value }));
-                                              setOpenDropdowns(prev => ({ ...prev, [`dynamic-filter-${selectedCustomFilter}`]: false }));
-                                              // Trigger search after selection
-                                              setTimeout(() => {
-                                                setTableState(prev => ({ ...prev }));
-                                              }, 100);
-                                            }}
-                                            className="whitespace-normal"
-                                          >
-                                            <Check
-                                              className={`mr-2 h-4 w-4 flex-shrink-0 ${
-                                                currentValue === value ? "opacity-100" : "opacity-0"
-                                              }`}
-                                            />
-                                            <span className="break-words">{label}</span>
-                                          </CommandItem>
-                                        );
-                                      })}
-                                      </CommandGroup>
-                                    </CommandList>
-                                  </Command>
-                                </PopoverContent>
-                              </Popover>
-                            );
-                          })()}
-                        </div>
+                      {/* Clear Filters Button */}
+                      {(selectedCustomFilter !== 'all' || Object.keys(dynamicFilterValues).some(key => dynamicFilterValues[key])) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCustomFilter('all');
+                            setDynamicFilterValues({});
+                            // Trigger search to refresh results
+                            setTimeout(() => {
+                              setTableState(prev => ({ ...prev }));
+                            }, 100);
+                          }}
+                          className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Clear
+                        </Button>
                       )}
-                      
-
                     </div>
                   )}
                 </div>

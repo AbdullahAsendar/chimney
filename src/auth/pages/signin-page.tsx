@@ -9,6 +9,7 @@ import { LoaderCircleIcon, AlertCircle, X, Clipboard, Shield, Lock, Eye, EyeOff 
 import { AccountDeactivatedDialog } from '@/partials/dialogs/account-deactivated-dialog';
 import { toAbsoluteUrl } from '@/lib/helpers';
 import { EnvironmentToggle } from '@/components/common/environment-toggle';
+import { DevEnvironmentLogin } from '@/auth/components/dev-environment-login';
 
 export function SignInPage() {
   const [searchParams] = useSearchParams();
@@ -66,11 +67,14 @@ export function SignInPage() {
   return (
     <>
       <div className="min-h-screen flex flex-col items-center justify-center p-6 sm:p-8">
-        <div className="w-full max-w-md mx-auto">
+        <div className="w-full max-w-4xl mx-auto">
           <div className="flex justify-end mb-4">
             <EnvironmentToggle />
           </div>
-          <Card className="shadow-2xl border-0 bg-white/95 backdrop-blur-sm dark:bg-slate-900/95 dark:border-slate-700/50">
+          
+          {/* Main Login Card */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <Card className="shadow-2xl border-0 bg-white/95 backdrop-blur-sm dark:bg-slate-900/95 dark:border-slate-700/50">
             <CardHeader className="text-center pb-8 pt-8">
               <div className="flex justify-center mb-1">
                 <img
@@ -190,6 +194,10 @@ export function SignInPage() {
               </div>
             </div>
           </Card>
+          
+          {/* Dev Environment Login Card */}
+          <DevEnvironmentLogin />
+        </div>
         </div>
       </div>
       <AccountDeactivatedDialog
